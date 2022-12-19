@@ -1,0 +1,347 @@
+---
+title: "1_load_normalize"
+author: "shaphan"
+date: "11/17/2022"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+# load libraries
+```{r}
+
+#load necessary libraries
+library(phyloseq)
+library(ggplot2)
+library(vegan)
+library(tidyr)
+
+
+# increases memory limit used by R
+memory.limit(size = 350000)
+
+# custom functions related to data loading and decontamination
+source("./Code/functions_loading_and_decontamination.R")
+
+```
+
+
+
+# load data and build phyloseq object
+```{r}
+
+
+
+# loads the OTU table, immediatetly saving it as a phyloseq OTU table (lighter than a data frame)
+raw_bac_otutab<-otu_table(object = read.table(file = "./Data/16S_ECA_seqtab_final.txt",
+                                              header = TRUE,
+                                              row.names = 1, # first column has row names (ASV names)
+                                              check.names = FALSE), # prevents "X" to be added to column names, such as X49_16S,
+                          taxa_are_rows = TRUE)
+
+sample_sums(raw_bac_otutab)%>%sum
+
+
+#updated tax
+sklearn_bac_taxtab<-read.table(file = "./Data/16S_ECA_taxonomy.tsv",
+                               header = TRUE,
+                               sep = "\t",
+                               row.names = 1, # first column has row names (ASV names)
+                               check.names = FALSE) # prevents "X" to be added to column names, such as X49_16S,
+
+
+
+# adjusts number and name of columns
+sklearn_bac_taxtab<- separate(data = sklearn_bac_taxtab,
+                              col = Taxon,
+                              into =c("Kingdom",
+                                      "Phylum",
+                                      "Class",
+                                      "Order",
+                                      "Family",
+                                      "Genus",
+                                      "Species"),
+                              sep = "; ")
+
+
+
+# change from d__Bacteria to k__bacteria, mathcing fungi dataset
+sklearn_bac_taxtab$Kingdom<-gsub("d__", "k__", sklearn_bac_taxtab$Kingdom)
+
+
+
+# saves taxa as phyloseq object
+sklearn_bac_taxtab<-tax_table(object = as.matrix(sklearn_bac_taxtab))
+
+
+
+#change name and remove old object
+raw_bac_taxtab<-sklearn_bac_taxtab
+rm(sklearn_bac_taxtab)
+
+
+
+# loads the representative sequences table, immediatetly saving it as a phyloseq OTU table (lighter than a df)
+raw_bac_refseq<-refseq(physeq = Biostrings::readDNAStringSet(filepath = "./Data/16S_ECA_repset.fasta", use.names = TRUE))
+taxa_names(raw_bac_refseq)<-gsub(" .*", "", taxa_names(raw_bac_refseq)) # drops taxonomy from ASV names
+
+
+
+# loads the mapping tile, immediatetly saving it as a phyloseq OTU table (lighter than a df)
+raw_bac_metadata<-sample_data(object = read.table(file = "./Data/16S_ECA_Mapping_file.txt",
+                                                  header = TRUE,
+                                                  sep = "\t",
+                                                  row.names = 1, # first column has row names (ASV names)
+                                                  check.names = FALSE)) # prevents "X" to be added to column names, such as X49_16S,
+
+#adjust sample names
+# remove any number of numeric charters([0-9]+) followed by the constant (_ID2577_16S-) and then any number of numeric chartaers up to and including a "-" ([0-9]+-)
+otutab_sampnames<-gsub("[0-9]+_ID2577_16S-[0-9]+-", "", phyloseq::sample_names(raw_bac_otutab)) 
+
+#now remove anything (*) after and includingthe dash (-) the dot indicates that * has a special meaning (matches any chartaer)
+otutab_sampnames<-gsub("-.*", "", otutab_sampnames)
+
+#overwrite the old sample names with the correct (short) version that was just created
+phyloseq::sample_names(raw_bac_otutab)<-otutab_sampnames
+
+
+
+#check dimensions
+dim(raw_bac_otutab)
+dim(raw_bac_metadata)
+
+# build the main 16S phyloseq object by putting all these phyloseq-class objects (otu table, tax table, ref seq, metadta) into a single ps
+raw_bac_ps<-merge_phyloseq(raw_bac_otutab,
+                           raw_bac_taxtab,
+                           raw_bac_refseq,
+                           raw_bac_metadata)
+
+#are tehre missing samples?
+sample_names(raw_bac_otutab)[which(!sample_names(raw_bac_otutab) %in%  sample_names(raw_bac_ps) )]
+
+
+
+# remove old objects to reduce memory use
+rm(raw_bac_otutab,raw_bac_taxtab,raw_bac_refseq,raw_bac_metadata)
+
+
+
+# change names from ASV to  bASV, so they can be distinguished from bacterial ASVs
+taxa_names(raw_bac_ps)<-paste("b", taxa_names(raw_bac_ps), sep = "")
+tax_table(raw_bac_ps)<-gsub(" ", "", tax_table(raw_bac_ps)) # drops a space character from taxa names. I don't know how that character ended up in there
+
+
+
+# let's check the imported objects. Often errors will arise from typos when filling up the data sheets
+otu_table(raw_bac_ps)[1:10,1:10]
+sample_data(raw_bac_ps)[1:10,1:10]
+tax_table(raw_bac_ps)[1:10,1:6]
+refseq(raw_bac_ps)
+
+# run garbage collection after creating large objects
+gc()
+
+
+
+```
+
+
+# remove bad taxa
+```{r}
+# here we see that sequences of only 50bp were still retained by the updated dada2 pipeline
+hist(as.data.frame(refseq(raw_bac_ps)@ranges)$width, breaks = 300)
+summary(as.data.frame(refseq(raw_bac_ps)@ranges)$width) # ps = phyloseq
+
+
+
+# here we get rid of sequences shorter than 380bp. this reduced the total number of taxa by ~4k (from 384089 to 380244 taxa )
+raw_bac_ps<-prune_taxa(taxa = as.data.frame(refseq(raw_bac_ps)@ranges)$width>380,
+                       x = raw_bac_ps)
+
+
+
+# keeps only ASVs identified as bacterial
+raw_bac_ps<-subset_taxa(raw_bac_ps, Kingdom=="k__Bacteria") # drops from 380244 to 380019 taxa, barely any difference
+
+
+
+# define library sizes as metadata before filtering
+raw_bac_ps@sam_data$library_sizes_prefiltering<-sample_sums(raw_bac_ps)
+
+
+
+# removes taxa occurring less than 8 times in the data set, as VSEARCH standard
+otu_table(raw_bac_ps) <- otu_table(raw_bac_ps)[which (rowSums(otu_table(raw_bac_ps)) > 7),]  #drops from 380K to 168K taxa, from 222M to 221M sequences (843k sequences removed)
+
+
+
+
+# filter ASV according samples (min 0 reads, present in 3 samples)
+filter <- phyloseq::genefilter_sample(raw_bac_ps, filterfun_sample(function(x) x > 0), A = 3)
+raw_bac_ps <- prune_taxa(filter, raw_bac_ps) #drops from 168k to 72k taxa, drops from 221M  to 219M reads
+
+
+
+#define plastid, mitochondria and host plant contamination ps objects
+Mitochondria_ps<-subset_taxa(raw_bac_ps, Family == "f__Mitochondria" | Family == "Mitochondria")
+Plastid_ps<-subset_taxa(raw_bac_ps, Order == "o__Chloroplast" | Order == "Chloroplast")
+host_plant_ps<-merge_phyloseq(Mitochondria_ps,Plastid_ps)
+
+
+
+#quick histogram showing plant DNA contamination
+hist(sample_sums(host_plant_ps)/sample_sums(raw_bac_ps)*100, breaks = 100)
+
+
+
+# define host plant 16S contamination as metadata
+raw_bac_ps@sam_data$Mitochondria_reads<-sample_sums(Mitochondria_ps)
+raw_bac_ps@sam_data$Plastid_reads<-sample_sums(Plastid_ps)
+raw_bac_ps@sam_data$Host_DNA_n_reads<-sample_sums(host_plant_ps)
+raw_bac_ps@sam_data$Host_DNA_contamination_pct<-sample_sums(host_plant_ps)/sample_sums(raw_bac_ps)*100
+
+
+
+# remove plant host sequences (plastid and mitochndrial DNA)
+raw_bac_ps<-remove_Chloroplast_Mitochondria(raw_bac_ps) # drops from 72k to 69.9k taxa, from 219M to 121M reads (almost 45% of our 16S sequencing effort! that's about 12k Euro!)
+
+
+#rename ps object
+unnormalized_bac_ps<-raw_bac_ps
+rm(raw_bac_ps)
+
+# run garbage collection after creating large objects
+gc()
+```
+
+
+# remove the two sampels with zero reads, remove four samples with very low library size
+```{r}
+
+# add library sizes as part of metadata
+sample_data(unnormalized_bac_ps)$library_size<-sample_sums(unnormalized_bac_ps)
+
+
+
+#check librabzy size distribution
+hist(sample_data(unnormalized_bac_ps)$library_size)
+summary(sample_data(unnormalized_bac_ps)$library_size)
+
+
+
+# remove 2 samples with library size = 0  (non-informative; failed PCR/sequencing)
+unnormalized_bac_ps<-subset_samples(unnormalized_bac_ps, library_size >0)
+
+
+# check sorted library sizes
+sample_sums(unnormalized_bac_ps)%>%sort
+
+#remove the four samples with very low library size
+unnormalized_bac_ps<-subset_samples(physeq = unnormalized_bac_ps,
+                      sample_sums(unnormalized_bac_ps)>=26920  )
+
+
+#let's save this rarefied objects as RData so they can be loaded in other scripts
+save(unnormalized_bac_ps, file = "./Data/unnormalized_bac_ps.RData")
+load(file = "./Data/unnormalized_bac_ps.RData")
+
+#colect garbage
+gc()
+
+```
+
+
+# rarefaction normalization
+```{r}
+
+
+
+#check plot for some minimum library sizes on top soil samples
+  ggplot(data = sample_data(unnormalized_bac_ps),
+         mapping = aes(x=amendment, y=library_size, color = sample_type, fill = sample_type))+
+    geom_jitter()+
+    geom_boxplot()+
+    geom_hline(yintercept=30000, color="green")+
+    geom_hline(yintercept=25000, color="yellow")+
+    geom_hline(yintercept=20000, color="blue")+
+    geom_hline(yintercept=15000, color="red")+
+theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1))
+
+
+
+#finally, a rarefaction curve
+  rarecurve(t(as.data.frame(otu_table(unnormalized_bac_ps))),
+          label = FALSE,
+          step = 2000,
+          main="Rarefaction", ylab = "Number of ASVs", xlab = "Number of DNA reads",
+          abline(v = 26920, col="red", lwd=3, lty=2))
+
+
+
+#rarefy data
+min(sample_sums(unnormalized_bac_ps)) #minimumum library size
+sort.default(colSums(otu_table(unnormalized_bac_ps))) # sometimes you might want to lose/remove one or more samples that have a very low library size. you would have to balance the number of samples with the minimum number of sequences. in this particular data set, we won't cut any samples as the rarefaction curve looks very good
+set.seed(100) # set a random seed so that whenever you re-run this code you draw the same set of OTUs
+rarefied_Bac_ps<-rarefy_even_depth(unnormalized_bac_ps,
+                                   sample.size = 26920,
+                                   rngseed = FALSE,
+                                   replace = TRUE,
+                                   trimOTUs = TRUE,
+                                   verbose = TRUE)
+
+
+
+# check lost % of samples, ASVs, and total sequences
+1 - nsamples(rarefied_Bac_ps)/nsamples(unnormalized_bac_ps)
+1 - ntaxa(rarefied_Bac_ps)/ntaxa(unnormalized_bac_ps)
+1 - sum(sample_sums(rarefied_Bac_ps))/sum(sample_sums(unnormalized_bac_ps))
+
+
+
+#check completeness of sample representation
+table(sample_data(rarefied_Bac_ps)$amendment,
+      sample_data(rarefied_Bac_ps)$sample_type)
+
+#let's save this rarefied objects as RData so they can be loaded in other scripts
+save(rarefied_Bac_ps, file = "./Data/rarefied_bac_ps.RData")
+
+
+```
+
+#normalize with cummulative sum scaling (CSS)
+```{r}
+
+library("metagenomeSeq")
+
+# first, let's transform the phyloseq object into an MR experiment object
+MRexp_objt_l<-phyloseq_to_metagenomeSeq(unnormalized_bac_ps)
+
+
+#here you can access the abundance matrix normalized by cummulative sum scaling. you could overwirte the phyloseq object with this
+CSS_matrix_l <- MRcounts(MRexp_objt_l, norm = TRUE, log = TRUE) # using a log scale will essentially reduce the impact of common species and increase the impact of rare species
+
+
+
+#make a new phyloseq object list...
+CSS_bac_ps<-unnormalized_bac_ps
+
+
+
+# and now change it's taxa table
+otu_table(CSS_bac_ps)<-otu_table(CSS_matrix_l, taxa_are_rows = TRUE)
+ 
+#this is your final phyloseq object
+CSS_bac_ps
+CSS_bac_ps@otu_table[1:10,1:10]
+rarefied_Bac_ps@otu_table[1:10,1:10]
+
+
+
+#let's save these unnormalized objects as RData so they can be loaded in other scripts
+save(CSS_bac_ps, file = "./Data/CSS_Bac_ps.RData")
+
+
+
+```
+
