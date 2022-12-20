@@ -68,8 +68,10 @@ remove_Chloroplast_Mitochondria<- function(physeq_object){
 
 decontaminate_and_plot<-function(phyloseq_object){
   
+  require(decontam)
+  
   # set negatives as TRUE in a  new column 
-  sample_data(phyloseq_object)$is.neg <- sample_data(phyloseq_object)$Stress  == "Blank" 
+  sample_data(phyloseq_object)$is.neg <- sample_data(phyloseq_object)$sample  == "MOCK" 
   
   # add library size to metadata
   sample_data(phyloseq_object)$library_size<-sample_sums(phyloseq_object)
@@ -77,10 +79,7 @@ decontaminate_and_plot<-function(phyloseq_object){
   # decontaminate! read details on decontam package. use at least 3 blank samples for minimal decontamination. grouping your blanks in batches (such as sampling blanks, DNA extraction blanks, PCR blanks) can help you remove contaminants according different sources. Try to obtain the DNA concentration from the PCR product to include this variable in the decontamination process.
   decontam_output <- isContaminant(transform_sample_counts(phyloseq_object, function(OTU) OTU/sum(OTU)),
                                    neg="is.neg",
-                                   batch = "Speed",
-                                   conc = "Amplicon_concentation_ngul",
-                                   method = "combined",
-                                   threshold= 0.05)  
+                                   threshold= 0.15)  
   n_contaminants<- table(decontam_output$contaminant) # this shows the number of  contaminates (=TRUE)
   head(decontam_output) # checks decontam output
   
@@ -92,9 +91,9 @@ decontaminate_and_plot<-function(phyloseq_object){
   physeq_norm_pa <- transform_sample_counts(transform_sample_counts(phyloseq_object, function(OTU) OTU/sum(OTU)),
                                             function(abund) 1*(abund>0))
   
-  physeq_norm_pa_neg <- prune_samples(sample_data(physeq_norm_pa)$Stress == "Blank", 
+  physeq_norm_pa_neg <- prune_samples(sample_data(physeq_norm_pa)$sample == "MOCK", 
                                       physeq_norm_pa)
-  physeq_norm_pa_pos <- prune_samples(sample_data(physeq_norm_pa)$Stress != "Blank", 
+  physeq_norm_pa_pos <- prune_samples(sample_data(physeq_norm_pa)$sample != "MOCK", 
                                       physeq_norm_pa)
   
   # Make data.frame of prevalence in positive and negative samples
@@ -109,37 +108,24 @@ decontaminate_and_plot<-function(phyloseq_object){
     ggtitle("Decontamination plot")
   
   
-  set.seed(100)
-  contaminant_ASV<-plot_frequency(seqtab = phyloseq_object, 
-                                  taxa = sample(contaminants,30),
-                                  conc="Amplicon_concentation_ngul")+
-    aes(color = library_size)+
-    scale_color_viridis()+
-    ggtitle("Contaminant ASVs")
-
+ 
   
   #clean physeq object by removing contaminant OTUS, then remove blank sample 
   phyloseq_object <- prune_taxa(!taxa_names(phyloseq_object) %in% contaminants, phyloseq_object) # keep only taxa that are not in the list of contaminants
   #phyloseq_object <- subset_samples(phyloseq_object, colSums(otu_table(phyloseq_object))>0)
   
   #clean physeq object by removing blank samples
-  physeq_decontaminated <- subset_samples(phyloseq_object, Stress != "Blank")
+  physeq_decontaminated <- subset_samples(phyloseq_object, sample != "MOCK")
   
-  set.seed(100)
-  real_ASV<-plot_frequency(seqtab = physeq_decontaminated, 
-                           taxa = sample(taxa_names(physeq_decontaminated),30),
-                           conc="Amplicon_concentation_ngul")+
-    aes(color = library_size)+
-    scale_color_viridis()+
-    ggtitle("Real ASVs")
+
   
   
   output<-list(physeq_decontaminated,
                decontamination_plot,
                decontam_output,
-               n_contaminants,
-               contaminant_ASV,
-               real_ASV)
+               n_contaminants)
+  
+  
   return(output)
 }
 
