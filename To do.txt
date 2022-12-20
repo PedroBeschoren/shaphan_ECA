@@ -1,0 +1,41 @@
+1) separate metadate with new added columns (nested factors)
+2) adjust column name for sample type  (curretly as species, adjust metadata in new columns as if nested)
+3)rerun from script 1_load_filter_normalize
+4) check objects individually, verify the function of the R functions to udnerstand what they do, also check the arguments for each function absed on the help section (F1)
+5)rerun initial part of script 2_beta_diversity
+
+this can be done while also cheking the other R projects on microbiome (MeJA pilot, katherine_thesis)
+
+
+
+
+
+
+NOTES:
+Use `renv::snapshot()` to save the state of your library to the lockfile.
+
+Do you want to proceed? [y/N]: Y
+* Lockfile written to '~/OneDrive/shapahn/shaphan_ECA/renv.lock'.
+
+Use `renv::restore()` to restore your library from the lockfile.
+
+*********************************
+
+Double check metadata, specially mock4 (also check names in otu table)
+double check outliers in CSS data (do they match the 4 samples removed from rarefaction? remove them from CSS as well)
+calculate permanova for bulk soils
+better filter/subset samples for alpha diversity (remove mocks etc)
+calculate alpha diversity
+test differences for alpha diversity
+check beta dispersion
+
+########################
+total number of samples (404 samples) and sequences (~ 172k different ASVs), 91M reads
+total number of rarefied samples and rarefication depth (26k) 400 samples (42k ASVs)
+
+"Amplicon Sequencing of the 16S rRNA gene in a NovaSeq platform provided XXX million sequences across 404 samples. These were processed into 91M valid sequences across 172k ASVs. Normalization by rarefying could maintain a minim sample depth of 26k seqeunces across 400 samples.
+Microbial community changes due to experimental treatments were clearly different according to PERMANOVA models on beta diversity. There were tree-way interactions on with significant frass_treatment, frass_source, frass_dose in both rhizosphere and bulk soil communities. These very clear treatment effects indicates that frass source, concentration and composting all play importnat roles in shaping microbial communities. This was observed both in bulk soils communities and rhizopshere
+Composted frass was slight more similar to the no frass group than the Uncomposted group, at both frass concentrations. This could suggested that composeted frass additions could induce more substle shifts in the soil community and better ressample a soil wihtou frass ammenents, while still incomporating the nutricial benefits. this occurs for both rhizosphere and bulk soil communities
+Alpha diversity analysis indicates significant interaction effects between the frass srouces and plant compartment (rhizosphere and bulk soil). This indicates that frass fromd ifferent origins will induce differnt diversity levels on the different soil enviroments, allowing to select a better frass management strategy that stimulates biodiversity.
+
+We could observe that all facotrs and their interactions were significant ()
