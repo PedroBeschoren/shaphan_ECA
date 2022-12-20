@@ -456,7 +456,12 @@ unnormalized_BacFun_ps_l<-lapply(unnormalized_BacFun_ps_l, function (x){
   x@sam_data$leaf_size<-as.numeric(x@sam_data$leaf_size)
   x@sam_data$shoot_biomass<-as.numeric(x@sam_data$shoot_biomass)
   
+  # makes new variables
   x@sam_data$frass_treatment_and_dose<-paste(x@sam_data$frass_treatment, x@sam_data$frass_dose, sep = "_")
+  x@sam_data$frass_treatment_dose_source<-paste(x@sam_data$frass_treatment, 
+                                                x@sam_data$frass_dose, 
+                                                x@sam_data$frass_source, 
+                                                sep = "_")
   
   return(x)
   

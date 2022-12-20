@@ -4,9 +4,9 @@ author: "shaphan"
 date: "11/17/2022"
 output: html_document
 editor_options: 
+  
+  
   chunk_output_type: console
-  
-  
 ---
 
 
@@ -24,40 +24,34 @@ library(EcolUtils)
 library(microbiome)
 library(car)
 library(agricolae)
+library(metagMisc)
+library("ggpubr")
+library(purrr)
+library(EcolUtils)
+
+
+# increases memory limit used by R
+memory.limit(size = 350000)
 
 
 
 #load the phyloseq objects containing all microbiome data
-load(file = "./Data/CSS_Bac_ps.RData")
-load(file = "./Data/rarefied_bac_ps.RData")
+load(file = "./Data/CSS_BacFun_ps_l.RData")
 
 
-CSS_bac_ps
-rarefied_Bac_ps
 
-# samples present in both dataset
-which(sample_names(CSS_bac_ps) %in% sample_names(rarefied_Bac_ps))
-diff_sample<-which(!sample_names(CSS_bac_ps) %in% sample_names(rarefied_Bac_ps))
+
 
 ```
 
 
 #separate bulk soil from rhizosphere and frass
 ```{r}
-CSS_bac_ps@sam_data
+
+CSS_bac_ps_sampletype_l<-metagMisc::phyloseq_sep_variable(CSS_BacFun_ps_l$Bac, variable = "sample_type")
+CSS_fun_ps_sampletype_l<-metagMisc::phyloseq_sep_variable(CSS_BacFun_ps_l$Fun, variable = "sample_type")
 
 
-CSS_bac_ps_rhizosphere<-subset_samples(CSS_bac_ps, sample_type  =="rhizosphere")
-CSS_bac_ps_rhizosphere<-prune_taxa(taxa = rowSums(otu_table(CSS_bac_ps_rhizosphere))>0,
-                                  x = CSS_bac_ps_rhizosphere)
-
-CSS_bac_ps_bulk<-subset_samples(CSS_bac_ps, sample_type  =="bulk_soil")
-CSS_bac_ps_bulk<-prune_taxa(taxa = rowSums(otu_table(CSS_bac_ps_bulk))>0,
-                                  x = CSS_bac_ps_bulk)
-
-CSS_bac_ps_frass<-subset_samples(CSS_bac_ps, sample_type  =="frass")
-CSS_bac_ps_frass<-prune_taxa(taxa = rowSums(otu_table(CSS_bac_ps_frass))>0,
-                                  x = CSS_bac_ps_frass)
 
 ```
 
@@ -66,215 +60,183 @@ CSS_bac_ps_frass<-prune_taxa(taxa = rowSums(otu_table(CSS_bac_ps_frass))>0,
 
 Some clustering and treatment effects are evident!
 ```{r}
-#create sample__name variable
-CSS_bac_ps_rhizosphere@sam_data$sample__name<-sample_names(CSS_bac_ps_rhizosphere)
 
 
-# remove outliers
-CSS_bac_ps_rhizosphere<-subset_samples(physeq = CSS_bac_ps_rhizosphere, sample__name != "83R")
-CSS_bac_ps_rhizosphere<-subset_samples(physeq = CSS_bac_ps_rhizosphere, sample__name != "5R")                                       
-
-# Let's make a Non-Metric Multidimensional Scaling (NMDS) of all our samples based on CSS normalization
-nmds   <- phyloseq::ordinate(CSS_bac_ps_rhizosphere,
-                             method ="NMDS", # this method has few assumptions and readly accepts different data structures
-                             distance="bray", # bray-curtis distance is suitable for sparse data - such as the zero-inflated microbiome data we have
-                             try=500, # number of iterations
-                             autotransform=TRUE) # automatically transforms your data, if needed. reduces weight of outliers
-                              #weakties = FALSE prevests tress from colapsing into zero
-#saves calculated NMDS
-#save(nmds, file = "./Data/CSS_Bac_NMDS.RData")
+NMDS_Bac_l <-lapply(CSS_bac_ps_sampletype_l, function (x)
+          ordinate(x,
+                   method="NMDS",
+                   distance="bray",
+                   try=2000,
+                   autotransform=TRUE))
 
 
-#plot NMDS ordination
-plot1<-plot_ordination(physeq = CSS_bac_ps_rhizosphere,
-                ordination = nmds,
-                color= "frass_treatment",
-                shape = "frass_source")+
-  theme_classic() +
-  geom_point(aes(size=frass_dose))+
-  facet_wrap(~amendment)+
-  theme(plot.title = element_text(size = 10, face = "bold", hjust = 0.5)) +
-  theme(legend.position="right")
+
+
+# define a function to calculate and plot NMDS based on bray-curtis
+NMDS_calculation_l <- function(physeq_l, ordination_output) {
+  
+  # this function takes as input a list of phyloseq objects and a list of calculated ordinations
+  # it also takes a list of bray-curtis distances calculated with phyloseq::ordinate
+  # it returns a list of NMDS plots, with titles in each plot
+  
+  untitled_plot_l<-mapply(function(x, y)
+    phyloseq::plot_ordination(physeq = x, 
+                              ordination = y,
+                              color ="frass_source",
+                              shape = "frass_treatment_and_dose")+
+      scale_shape_manual(values=c(1,2,16, 17,7,8))+
+      theme_classic() +
+      labs(subtitle = paste("Stress", round(y$stress, digits=4))) +
+      theme(plot.title = element_text(size = 10, face = "bold")) +
+      theme(legend.position="right"),
+    x = physeq_l,
+    y = ordination_output,
+    SIMPLIFY = FALSE)
+  
+  
+  
+  
+  titles_l <- names(physeq_l)
+  
+  
+  
+  Plot_l<- mapply(function (z,w)
+    z + ggtitle(w),
+    z = untitled_plot_l,
+    w = titles_l,
+    SIMPLIFY = FALSE)
+  
+  return(Plot_l)
+}
+
+#use custom function, creating a list of plotsfunction
+NMDS_plots_l<-NMDS_calculation_l(CSS_bac_ps_sampletype_l, NMDS_Bac_l )
+NMDS_plots_l
+# arrange all 3 plots in a pannel
+NMDS_plots_l<-ggarrange(NMDS_plots_l$bulk_soil,
+                        NMDS_plots_l$rhizosphere,
+                        NMDS_plots_l$frass)
 
 
 #export plot
-ggsave(filename = "./Results/NMDS_rhizosphere.pdf" ,
-       plot = plot1,
-       width = 25,
-        height =15,
+ggsave(filename = "./Results/NMDS_3_sample_types.pdf" ,
+       plot = NMDS_plots_l,
+       width = 30,
+       height =30,
        units = "cm" )
 
+
+
 ```
+
+
+#filter samples and recalcuate ordintions
 
 ```{r}
-#create sample__name variable
-CSS_bac_ps_bulk@sam_data$sample__name<-sample_names(CSS_bac_ps_bulk)
+# remove frass sample type from list
+CSS_bac_ps_filt_l<-CSS_bac_ps_sampletype_l[c(1,3)]
+
+# remove frass source N from samples
+CSS_bac_ps_filt_l<-lapply(CSS_bac_ps_filt_l, function(x){
+  x<-subset_samples(x, frass_source != "N") # from frass source N
+  x<-prune_taxa(taxa_sums(otu_table(x)) > 0, x) # remove ASVs with zero coutns (tat is, ASVS that only show up on frass source N)
+return(x)
+})
 
 
 
 
-# Let's make a Non-Metric Multidimensional Scaling (NMDS) of all our samples based on CSS normalization
-nmds2   <- phyloseq::ordinate(CSS_bac_ps_bulk,
-                             method ="NMDS", # this method has few assumptions and readly accepts different data structures
-                             distance="bray", # bray-curtis distance is suitable for sparse data - such as the zero-inflated microbiome data we have
-                             try=500, # number of iterations
-                             autotransform=TRUE) # automatically transforms your data, if needed. reduces weight of outliers
-                              #weakties = FALSE prevests tress from colapsing into zero
-#saves calculated NMDS
-#save(nmds, file = "./Data/CSS_Bac_NMDS.RData")
-nmds2$points
-
-#plot NMDS ordination
-plot2<-plot_ordination(physeq = CSS_bac_ps_bulk,
-                ordination = nmds2,
-                color= "frass_treatment",
-                shape = "frass_source")+
-  theme_classic() +
-  geom_point(aes(size=frass_dose))+
-  facet_wrap(~amendment)+
-  theme(plot.title = element_text(size = 10, face = "bold", hjust = 0.5)) +
-  theme(legend.position="right")
+NMDS_Bac_filt_l <-lapply(CSS_bac_ps_filt_l, function (x)
+          ordinate(x,
+                   method="NMDS",
+                   distance="bray",
+                   try=2000,
+                   autotransform=TRUE))
 
 
-library(ggplot2)
-#export plot
-ggsave(filename = "./Results/NMDS_bulkSoil.pdf" ,
-       plot = plot2,
-       width = 25,
-        height =15,
-       units = "cm" )
-```
+#use custom function, creating a list of plotsfunction
+NMDS_plots_filt_l<-NMDS_calculation_l(CSS_bac_ps_filt_l, NMDS_Bac_filt_l )
+NMDS_plots_filt_l
 
-```{r}
-#create sample__name variable
-CSS_bac_ps_frass@sam_data$sample__name<-sample_names(CSS_bac_ps_frass)
+# arrange all 3 plots in a pannel
+NMDS_plots_filt_l<-ggarrange(NMDS_plots_filt_l$bulk_soil,
+                            NMDS_plots_filt_l$rhizosphere)
 
-
-# Let's make a Non-Metric Multidimensional Scaling (NMDS) of all our samples based on CSS normalization
-nmds3   <- phyloseq::ordinate(CSS_bac_ps_frass,
-                             method ="NMDS", # this method has few assumptions and readly accepts different data structures
-                             distance="bray", # bray-curtis distance is suitable for sparse data - such as the zero-inflated microbiome data we have
-                             try=500, # number of iterations
-                             autotransform=TRUE) # automatically transforms your data, if needed. reduces weight of outliers
-                              #weakties = FALSE prevests tress from colapsing into zero
-#saves calculated NMDS
-#save(nmds, file = "./Data/CSS_Bac_NMDS.RData")
-nmds3$points
-
-#plot NMDS ordination
-plot3<-plot_ordination(physeq = CSS_bac_ps_frass,
-                ordination = nmds3,
-                color= "frass_treatment",
-                shape = "frass_source")+
-  theme_classic() +
-  geom_point(aes())+
-  theme(plot.title = element_text(size = 10, face = "bold", hjust = 0.5)) +
-  theme(legend.position="right")
 
 
 #export plot
-ggsave(filename = "./Results/NMDS_frass.pdf" ,
-       plot = plot3,
-       width = 25,
-        height =15,
+ggsave(filename = "./Results/NMDS_RhizoBulk_types.pdf" ,
+       plot = NMDS_plots_filt_l,
+       width = 20,
+       height = 20,
        units = "cm" )
 
-
-
 ```
+
+
 
 
 # 2 - check beta dispersion
 
 beta dispersion is like multivatite homogeniety of variances. just like you can't compare properly very small error bars with very large error bars, you should check if the spread of the data clouds is similar per treatment
 
-# rhisophere
 
 ```{r}
-#calculates beta dispersions of the treatment effects
-beta_disper<- betadisper(d = phyloseq::distance(t(otu_table(CSS_bac_ps_rhizosphere)), method="bray"),
-                         group = sample_data(CSS_bac_ps_rhizosphere)[["frass_dose"]])
+
+#define function to calculate and plot beta dispersion
+beta_disp_plotAndTest<-function(phyloseq_list, group){
+  # phyloseq_list = a list of phyloseq objects
+  # group = the variale you want to test the beta dispersion of, in quotes
+    beta_disper_list<-lapply(phyloseq_list, function (x) 
+  betadisper(phyloseq::distance(t(otu_table(x)), method="bray"), sample_data(x)[[group]])) #selects only column "group""
+
+  # gets the names of the list
+tiles_list<-names(beta_disper_list)
+  
+  #runs anova on beta dispersions
+get_p<-lapply(beta_disper_list, function (x) 
+  anova(x, permutations = 999))
 
 
-
-# check if ebta dispersions are significantly differente
-beta_disper_calc<-anova(beta_disper, permutations = 999)
-
+p_dispersion<-map(get_p, 5) # gets the p value of the dispersion test
+p_dispersion <- p_dispersion[!is.na(p_dispersion)] # removes the generated NA
 
 
-# saves the p value of the dispersion test
-p_dispersion<-beta_disper_calc[[5]][1]
+#runs anova on beta dispersions
+bet_disp_PCOa_plot<-mapply(function (x,y,z) 
+  plot(x, 
+       main = y, 
+       sub =z, 
+       xlab="p value for homogeniety test:", 
+       ylab="PCoA"),
+  x = beta_disper_list,
+  y = tiles_list,
+  z = p_dispersion,
+  SIMPLIFY = FALSE) 
+
+#runs anova on beta dispersions
+bet_disp_boxplot<-mapply(function (x,y) 
+  boxplot(x, main = y),
+  x = beta_disper_list,
+  y = tiles_list,
+  SIMPLIFY = FALSE)
 
 
+return(list(bet_disp_PCOa_plot,bet_disp_boxplot))
+}
 
-#plots a spdier plot (PCoA) with centroids
-plot(beta_disper,
-     main = "Beta Dispersion",
-     sub = p_dispersion,
-     xlab="p value for homogeniety of multivariate variances:")
+
+# execute custom fucntion above
+beta_disp_plotAndTest(CSS_bac_ps_filt_l, "frass_source")
+beta_disp_plotAndTest(CSS_bac_ps_filt_l, "frass_dose")
+beta_disp_plotAndTest(CSS_bac_ps_filt_l, "frass_treatment")
+beta_disp_plotAndTest(CSS_bac_ps_filt_l, "frass_treatment_and_dose")
+
+
 
 
 
 ```
-
-# beta dispersion, bulk_soil
-
-```{r}
-#calculates beta dispersions of the treatment effects
-beta_disper<- betadisper(d = phyloseq::distance(t(otu_table(CSS_bac_ps_bulk)), 
-              method="bray"),
-         group = sample_data(CSS_bac_ps_bulk)[["frass_dose"]])
-
-
-
-# check if ebta dispersions are significantly differente
-beta_disper_calc<-anova(beta_disper, permutations = 999)
-
-
-
-# saves the p value of the dispersion test
-p_dispersion<-beta_disper_calc[[5]][1]
-
-
-
-#plots a spdier plot (PCoA) with centroids
-plot(beta_disper,
-     main = "Beta Dispersion",
-     sub = p_dispersion,
-     xlab="p value for homogeniety of multivariate variances:")
-```
-
-#beta dispersion, frass
-
-```{r}
-
-
-#calculates beta dispersions of the treatment effects
-beta_disper<- betadisper(d = phyloseq::distance(t(otu_table(CSS_bac_ps_frass)), method="bray"),
-              group = sample_data(CSS_bac_ps_frass)[["frass_treatment"]])
-
-
-
-# check if ebta dispersions are significantly differente
-beta_disper_calc<-anova(beta_disper, permutations = 999)
-
-
-
-# saves the p value of the dispersion test
-p_dispersion<-beta_disper_calc[[5]][1]
-
-
-
-#plots a spdier plot (PCoA) with centroids
-plot(beta_disper,
-     main = "Beta Dispersion",
-     sub = p_dispersion,
-     xlab="p value for homogeniety of multivariate variances:")
-
-
-```
-
-
 
 # 3 - run PERMANOVA and post-hoc test
 
@@ -283,66 +245,25 @@ We see significant treatment effects, with clear pairwise distinctions
 
 
 ```{r}
-CSS_bac_ps_rhizosphere<-subset_samples(CSS_bac_ps_rhizosphere, frass_treatment !="N")
-
-
-# Running the permanova with vegan::adonis2() on a single phyloseq object is very simple
-metadata<-as(sample_data(CSS_bac_ps_rhizosphere),"data.frame")
-#let's first define permutation design with permute::how()
-perm2<-how(# define blocks
-           nperm=999)# n of permutations
-
-
-
-# now let's calculate the permanova
-adonis2(phyloseq::distance(t(otu_table(CSS_bac_ps_rhizosphere)), method="bray") # this is your distance matrix of OTU abundances
-        ~ frass_treatment*frass_source*frass_dose, # this is your model
-        permutations=how(nperm=999), # we jsut defined the permutation settings above, you place them here
-        data = metadata) # metadata for the community matrix
+#testing permanovas 16S
+set.seed(303848)
+permanova_Bac_results <- lapply(CSS_bac_ps_filt_l, function (x)
+       adonis2(formula = phyloseq::distance(t(otu_table(x)), method="bray") ~ frass_treatment*frass_source*frass_dose,
+              data = as(sample_data(x),"data.frame"), # changing with as.data.frame is insufficient
+              permutations = how(nperm=999)))
 
 
 
-# post-hoc
-adonis.pair(dist.mat= phyloseq::distance(otu_table(CSS_bac_ps), method="bray"),
- Factor= as.factor(as(phyloseq::sample_data(CSS_bac_ps),"data.frame")$amendment))
+
+# Pairwise PERMANOVA 16S Stress factor
+set.seed(303848)
+pairwise_permanova_bac_results <- lapply(CSS_bac_ps_filt_l, function (x)
+  adonis.pair(dist.mat= phyloseq::distance(otu_table(x), method="bray"),
+              Factor= as.factor(as(phyloseq::sample_data(x),"data.frame")$frass_treatment)))
+
 
 
 ```
-
-
-```{r}
-CSS_bac_ps_bulk<-subset_samples(CSS_bac_ps_bulk, frass_treatment !="N")
-
-
-# Running the permanova with vegan::adonis2() on a single phyloseq object is very simple
-metadata<-as(sample_data(CSS_bac_ps_bulk),"data.frame")
-#let's first define permutation design with permute::how()
-perm2<-how(# define blocks
-           nperm=999)# n of permutations
-
-
-
-# now let's calculate the permanova
-adonis2(phyloseq::distance(t(otu_table(CSS_bac_ps_bulk)), method="bray") # this is your distance matrix of OTU abundances
-        ~ frass_treatment*frass_source*frass_dose, # this is your model
-        permutations=how(nperm=999), # we jsut defined the permutation settings above, you place them here
-        data = metadata) # metadata for the community matrix
-
-
-
-# post-hoc
-adonis.pair(dist.mat= phyloseq::distance(otu_table(CSS_bac_ps), method="bray"),
-  Factor= as.factor(as(phyloseq::sample_data(CSS_bac_ps),"data.frame")$amendment))
-
-
-```
-
-
-```{r}
-
-
-```
-
 
 
 # 4 - Alpha diversity calculations & plot
