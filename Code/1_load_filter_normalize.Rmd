@@ -439,7 +439,27 @@ unnormalized_BacFun_ps_l<-list(unnormalized_bac_ps,unnormalized_fun_ps)
 names(unnormalized_BacFun_ps_l)<-c("Bac","Fun")
 rm(unnormalized_bac_ps,unnormalized_fun_ps)
 
+
+#this is our list of objects
 unnormalized_BacFun_ps_l
+
+names(CSS_bac_ps_sampletype_l$bulk_soil@sam_data)
+
+# let's make sure some key factors are recorded as factors, and numeric are saved as numeric
+unnormalized_BacFun_ps_l<-lapply(unnormalized_BacFun_ps_l, function (x){
+  x@sam_data$frass_dose<-as.factor(x@sam_data$frass_dose)
+  x@sam_data$frass_treatment<-as.factor(x@sam_data$frass_treatment)
+  x@sam_data$frass_source<-as.factor(x@sam_data$frass_source)
+  x@sam_data$amendment<-as.factor(x@sam_data$amendment)
+  x@sam_data$sample_type<-as.factor(x@sam_data$sample_type)
+  
+  x@sam_data$leaf_size<-as.numeric(x@sam_data$leaf_size)
+  x@sam_data$shoot_biomass<-as.numeric(x@sam_data$shoot_biomass)
+  
+  return(x)
+  
+  
+})
 
 
 
