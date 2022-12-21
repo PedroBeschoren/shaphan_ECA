@@ -29,7 +29,6 @@ library("ggpubr")
 library(purrr)
 library(EcolUtils)
 
-
 # increases memory limit used by R
 memory.limit(size = 350000)
 
@@ -40,6 +39,23 @@ load(file = "./Data/CSS_BacFun_ps_l.RData")
 
 
 
+CSS_BacFun_ps_l
+
+
+```
+
+
+acessing and maanipulating lists
+```{r}
+CSS_BacFun_ps_l
+
+
+CSS_BacFun_ps_l$Bac
+CSS_BacFun_ps_l[1]
+str(CSS_BacFun_ps_l[[2]])
+
+lapply(CSS_BacFun_ps_l, function(x)
+  otu_table(x)[1:10,1:10])
 
 
 ```
@@ -47,8 +63,18 @@ load(file = "./Data/CSS_BacFun_ps_l.RData")
 
 #separate bulk soil from rhizosphere and frass
 ```{r}
-
+#split by sample type
 CSS_bac_ps_sampletype_l<-metagMisc::phyloseq_sep_variable(CSS_BacFun_ps_l$Bac, variable = "sample_type")
+
+# remove bulk soil outlier
+CSS_bac_ps_sampletype_l$bulk_soil<-subset_samples(CSS_bac_ps_sampletype_l$bulk_soil, sample_names(CSS_bac_ps_sampletype_l$bulk_soil) !="93B")
+               
+               
+            
+
+
+
+# split fun by sample type
 CSS_fun_ps_sampletype_l<-metagMisc::phyloseq_sep_variable(CSS_BacFun_ps_l$Fun, variable = "sample_type")
 
 
@@ -61,7 +87,7 @@ CSS_fun_ps_sampletype_l<-metagMisc::phyloseq_sep_variable(CSS_BacFun_ps_l$Fun, v
 Some clustering and treatment effects are evident!
 ```{r}
 
-
+# calculate ordinations
 NMDS_Bac_l <-lapply(CSS_bac_ps_sampletype_l, function (x)
           ordinate(x,
                    method="NMDS",
@@ -112,6 +138,9 @@ NMDS_calculation_l <- function(physeq_l, ordination_output) {
 #use custom function, creating a list of plotsfunction
 NMDS_plots_l<-NMDS_calculation_l(CSS_bac_ps_sampletype_l, NMDS_Bac_l )
 NMDS_plots_l
+
+
+
 # arrange all 3 plots in a pannel
 NMDS_plots_l<-ggarrange(NMDS_plots_l$bulk_soil,
                         NMDS_plots_l$rhizosphere,
@@ -167,7 +196,7 @@ NMDS_plots_filt_l<-ggarrange(NMDS_plots_filt_l$bulk_soil,
 #export plot
 ggsave(filename = "./Results/NMDS_RhizoBulk_types.pdf" ,
        plot = NMDS_plots_filt_l,
-       width = 20,
+       width = 40,
        height = 20,
        units = "cm" )
 
