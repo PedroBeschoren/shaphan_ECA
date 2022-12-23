@@ -1,0 +1,352 @@
+---
+title: "3_differential_abudance"
+author: "Pedro Beschoren"
+date: "2022-12-22"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+# 1 Deseq2 differential abundance analysis on lists of comparisons
+The use of lists in this analysis greatly reduces the amount of hard code. if running this for the first time, read carefully about the use of deseq2 for amplicon data. Each dataset may need tweaks on the selected p levels or minimal fold changes; for that you will edit build_sig_tab()
+
+
+base tutorial used here: https://joey711.github.io/phyloseq-extensions/DESeq2.html
+heatmap for final plot: http://rstudio-pubs-static.s3.amazonaws.com/288398_185f2889a5f641c6b9aa7b14fa15b635.html
+
+# 2 - Load libraries, data 
+This will be the bulk of the calculations and can take a moment
+
+```{r}
+
+
+
+#load necessary libraries
+library(phyloseq)
+library(ggpubr)
+library(purrr)
+library(pheatmap)
+library(DESeq2)
+library(metagMisc)
+library(dplyr)
+library(viridisLite)
+library(metacoder)
+
+
+
+# increases memory limit used by R
+memory.limit(size = 350000)
+
+
+
+#load the phyloseq objects containing all microbiome data
+load(file = "./Data/unnormalized_BacFun_ps_l.RData")
+
+
+
+
+
+```
+
+# 3 - split and filter the phyloseq object
+
+here we only look at bulk soil samples from the 16S dataset. we also remove the N treatment
+```{r}
+
+# split bacterial dataset
+unnormalized_BacFun_ps_l_bac_ps_sampletype_l<-metagMisc::phyloseq_sep_variable(unnormalized_BacFun_ps_l$Bac, variable = "sample_type")
+
+# remove frass sample type from list
+unnormalized_BacFun_ps_l_bac_ps_filt_l<-unnormalized_BacFun_ps_l_bac_ps_sampletype_l[c(1,3)]
+
+# remove frass source N from samples
+unnormalized_BacFun_ps_l_bac_ps_filt_l<-lapply(unnormalized_BacFun_ps_l_bac_ps_filt_l, function(x){
+  x<-subset_samples(x, frass_source != "N") # from frass source N
+  x<-prune_taxa(taxa_sums(otu_table(x)) > 0, x) # remove ASVs with zero coutns (tat is, ASVS that only show up on frass source N)
+return(x)
+})
+
+
+
+
+```
+
+## 4 - create deseq object - 16S
+```{r}
+
+# make list of deseqed phyloseq objects ; crossing  model of 3 factors
+deseq_3add_l <- lapply (unnormalized_BacFun_ps_l_bac_ps_filt_l, function (x) phyloseq_to_deseq2(x, ~ frass_source*frass_treatment*frass_dose))
+deseq_3add_l <- lapply (deseq_3add_l, function (x) DESeq(x, test="Wald", fitType="parametric"))
+
+# this unlisted, unsplit deseq2 object will be necessary to construct the heatmap
+ps_deseq <- phyloseq_to_deseq2(unnormalized_BacFun_ps_l_bac_ps_filt_l$bulk_soil, ~ frass_source * frass_treatment * frass_dose)
+ps_deseq <- DESeq(ps_deseq, test="Wald", fitType="parametric")
+
+
+
+```
+
+
+## 5 - define constract vecotrs
+this sets ths pairwise comparisons you wnt to make
+
+```{r}
+
+# make a list of the pairwise comparisons you want to run according the treatment ; 
+#  positive fold change: higher in fist factor (treatment) / negative fold change: higher in second factor(control)
+pairwise_comparison<-list(
+c("frass_source", "X", "Y"),
+c("frass_treatment", "U", "C"), 
+c("frass_dose", "2", "3"))
+
+```
+### 6 - make bulk soil pairwise comparisons
+These comparisons will be based on the data splits and the pairwise_comparison list you generated in the previous chunk
+
+
+```{r}
+# this function will build the significance table for each list, and has to be run once for each pairwise comparison (contro_VS_Meja1.0 and Control_VS_MeJA0.1)
+# I don't know why it is not working for the last contrast of the list above. it could be due to different sample sizes
+
+build_sig_tab<-function (deseq_obj, contrast_cha_vector, unsplit_ps, p_adjust_alpha, min_log_fold){
+
+ # alpha<-p_adjust_alpha # defines the alpha level for p adjustment to control for false discovery rate
+  #min_fold<-min_log_fold # defines minimum fold difference in counts to classify an OTU as differential
+
+
+  list_res <- lapply(contrast_cha_vector, function(x) 
+    results(deseq_obj, contrast=x, cooksCutoff = FALSE))
+
+
+  list_sigtab <- lapply(list_res, function (x) 
+    x[which(x$padj < p_adjust_alpha), ]) # cuts results based on p_adjust_alpha for FDR
+  
+   list_sigtab <- lapply(list_sigtab, function (x) 
+    x[which(abs(x$log2FoldChange) > min_log_fold), ]) # cuts results based on minimum fold change
+   
+  list_sigtab <- lapply(list_sigtab, function (x) 
+    x[order(x$padj),])  # sorts lists of OTUs based on p values of pairwise abundance differences
+  
+  
+  
+  
+  
+  
+  # this silenced chuck allows you to limit the number of OTUs accepted as diferential in each comparision. note that if you define the minimum number as 1:40 (1 to 40) but you only hace 39 differentially abundannt OTUs the function will crash and you will not have these results. just remove the hashtags below to limt to 3 top differentially abundant OTUs
+  
+    # max_OTU_n<-1:3 # defines the maximum number of OTUs to include in each pairwise coparison
+    # list_sigtab <- lapply(list_sigtab, function (x) 
+    # x[max_OTU_n,])  # cuts results based on maximum numer of OTUs counted as differential
+  
+  
+  
+  
+  
+  
+    
+  list_sigtab <- lapply(list_sigtab, function (x) 
+    cbind(as(x, "data.frame"), as(tax_table(unsplit_ps)[rownames(x), ], "matrix"))) # here we only colect the taxa names from the original, unsplit, phyloseq object
+  return(list_sigtab)
+  }
+
+
+# run custom function
+sigtab_results_bulk<-build_sig_tab(deseq_obj = deseq_3add_l$bulk_soil,
+                                  contrast_cha_vector = pairwise_comparison,
+                                  unsplit_ps = unnormalized_BacFun_ps_l$Bac,
+                                  p_adjust_alpha = 0.001,
+                                  min_log_fold = 3)
+lapply(sigtab_results_bulk, dim)
+hist(sigtab_results_bulk[[1]]$padj)
+hist(sigtab_results_bulk[[1]]$log2FoldChange, breaks = 50)
+
+
+```
+
+### 7 - extract differentially abundant ASVS, check orders
+
+here we also look into the orders of the differentially abudannt ASVs
+```{r}
+
+# extract ASV names of the differentially abundant ASVs
+differentialy_abundant_ASVs<-lapply(sigtab_results_bulk, function (x) rownames(x))%>% # extract the rownames from the list, then....
+unlist(use.names=FALSE)%>% # flatten the rowname (OTU ID) list, ignoring the names of the lists, then...
+  unique() # remove duplications of the same OTUs
+
+# 1594 diff abund ASVs in crossing model at p adjust 0.05, log fold difference 2
+# 1154 diff abund ASVs in crossing model at p adjust 0.01, log fold difference 2
+# 943 diff abund ASVs in crossing model at p adjust 0.01, log fold difference 3
+# 847 diff abund ASVs in crossing model at p adjust 0.001, log fold difference 2
+# 713 diff abund ASVs in crossing model at p adjust 0.001, log fold difference 3 # i'm happy with this
+length(differentialy_abundant_ASVs)
+
+# extract Orders from teh sigtabs, showing how often an order is represented
+Order_representation<-lapply(sigtab_results_bulk, function (x) x$Order)%>% # extract the rownames from the list, then....
+unlist(use.names=FALSE)%>% # flatten the rowname (OTU ID) list, ignoring the names of the lists, then...
+  table()%>% # put it on a table, showing ORders that are more often represented
+sort(decreasing = TRUE)# sort that table
+
+
+#extarct orders of the  uniquely differential ASVs
+table(tax_table(prune_taxa(differentialy_abundant_ASVs, unnormalized_BacFun_ps_l$Bac))[,4])%>% 
+  sort()
+
+
+
+
+```
+#### ploting A - bi-plot heatmaps
+A heatmap like this is a convinient way to represent the key differences across OTUs and treatments
+
+note that on this heatmap, all comparisons are made against the control. you will need to change the contrasts to make, for example, a 1.0 Meja - 0.1MeJA comparison
+```{r}
+
+
+# note that the log change calculations are based on the full, unsplit and unlisted deseq2 object (that is, our complete dataset)
+ntb <- normTransform(ps_deseq) # defaults to log2(x+1)
+log2.norm.countsb <- assay(ntb)[differentialy_abundant_ASVs, ] #these colnames should match rownames(df)
+df <- as.data.frame(colData(ps_deseq)[,c("frass_dose","frass_source",  "frass_treatment")])
+row.names(df)<-row.names(as.data.frame(colData(ps_deseq)))
+df_row <- as.data.frame((tax_table(unnormalized_BacFun_ps_l$Bac))[,c("Order")])
+# this chnk of code lets us remove some families form the legend
+df_row$main_Orders<-df_row$Order %in%  names(Order_representation)[1:15]  # define if the order  is on this list of orders
+df_row<-mutate(df_row, main_order = if_else(main_Orders=="TRUE", df_row$Order, "Other" ))%>% # make new variable: if the family is on the lsit of families, add it to the new variale, if not wirte is as "Other"
+  select(main_order) # remove old columns
+
+#now plot the ehatmap
+pheatmap::pheatmap(log2.norm.countsb, color=viridis(24), annotation_col=df, annotation_row=df_row, main="log2(counts + 1)", 
+                   scale="none", fontsize_row = 3, fontsize_col = 8)
+
+
+
+```
+
+
+#### ploting B - metacoder heat trees
+```{r}
+
+
+
+
+#defien a function that takes a phyloseq object and returns heat trees
+phyloseq_to_heat_tree<-function(ps_object, sample_group){
+  
+  # this function output is a heat trees comparing metadata. the input is based on a phyloseq object
+  
+  # ps object =  a phyloseq object, containing sample metadata, otu table, and taxonomy table
+  # sample_group = the name of a column in your emtadata that you want to compare in the heat tree. it has to be quoted.
+  
+  # this function will create a matrix of heat trees if your metadata has more than 2 groups. it should fail if it has only 1 group
+  
+
+#remove unecessary taxonomic info (dada2id, "s__" and "ASV_id) by updating the tax table with a subset of the tax table
+tax_table(ps_object)<-tax_table(ps_object)[,1:7]
+
+
+# let's remove the "r__"ranks from the taxonomy, they can be useful but will pollute our plot
+tax_table(ps_object)[, colnames(tax_table(ps_object))] <- gsub(pattern = "[a-z]__", # regular expression pattern to search for
+                                                                   x = tax_table(ps_object)[, colnames(tax_table(ps_object))], # "df"
+                                                                   replacement = "") # replacement for pattern
+# transform from phyloseq to taxmap object
+taxmap_obj<-parse_phyloseq(ps_object)
+
+#get abundance per taxon
+taxmap_obj$data$tax_abund<-calc_taxon_abund(obj = taxmap_obj, 
+                                      data = "otu_table",
+                                      cols = taxmap_obj$data$sample_data$sample_id) 
+
+#get occurrence of ASVs per treatment
+# the sample groups needs some wrangling to fit within the soft code of the function
+taxmap_obj$data$tax_occ<- calc_n_samples(obj = taxmap_obj, 
+                                                      data = "tax_abund", 
+                                                      cols = taxmap_obj$data$sample_data$sample_id,
+                                                      groups = taxmap_obj$data$sample_data[colnames(taxmap_obj$data$sample_data)==sample_group][[1]]) 
+
+# calculate log2 median ratios and p values for a wilcoxcon test within taxas in this stress treatment groups
+# the sample groups needs some wrangling to fit within the soft code of the function
+taxmap_obj$data$diff_table <- compare_groups(obj = taxmap_obj,
+                                                        data = "tax_abund",
+                                                        cols = taxmap_obj$data$sample_data$sample_id, 
+                                                        groups = taxmap_obj$data$sample_data[colnames(taxmap_obj$data$sample_data)==sample_group][[1]]) 
+
+# set differential log ratio to 0 based on adjusted p values
+#taxmap_obj$data$diff_table$log2_median_ratio[taxmap_obj$data$diff_table$wilcox_p_value > 0.05] <- 0
+
+# define number of compared factors
+factors_compared<-taxmap_obj$data$sample_data[colnames(taxmap_obj$data$sample_data)==sample_group][[1]] 
+
+# draw the plot based on an if else statement: if there are 2 groups, plot a a heat tree comparing abundances between both groups, else plot a matrix of ehat trees. this function will fail if you only have 1 sample group! 
+
+if (length(unique(factors_compared)) == 2) {
+
+set.seed(1)
+ output<- taxmap_obj %>%
+heat_tree(
+            node_label = taxon_names,
+            node_size = n_obs,
+            node_color = log2_median_ratio,
+            node_color_interval = c(-5, 5), # The range of `log2_median_ratio` to display
+            node_color_range = c("cyan", "gray", "tan"), # The color palette used
+            layout = "davidson-harel",
+            node_color_axis_label = paste0("log2 median; tan", 
+                                           taxmap_obj$data$diff_table$treatment_1[1], 
+                                           "cyan", 
+                                           taxmap_obj$data$diff_table$treatment_2[1],
+                                           sep = " "),
+            initial_layout = "reingold-tilford")
+
+ } else {
+
+set.seed(1)
+output<-heat_tree_matrix(taxmap_obj,
+                         data = "diff_table", # this is the table with the data you want to plot
+                         node_size = n_obs, # n_obs is a function that calculates, in this case, the number of OTUs per taxon
+                         node_label = taxon_names,
+                         node_color = log2_median_ratio, # A column from `taxmap_obj$data$diff_table_3treatments`
+                         node_color_range = diverging_palette(), # The built-in palette for diverging data
+                         node_color_interval = c(-5, 5), # The range of `log2_median_ratio` to display
+                         edge_color_interval = c(-5, 5), # The range of `log2_median_ratio` to display
+                         node_size_axis_label = "Number of OTUs",
+                         node_color_axis_label = "Log2 ratio median proportions",
+                         layout = "davidson-harel", # The primary layout algorithm
+                         initial_layout = "reingold-tilford") # The layout algorithm that initializes node locations
+
+   
+   
+ }
+
+
+# clearly define the output object you will get from the function
+return(output)   
+
+
+}
+
+# make a ps objec that only has differentially abundant taxa
+ps_diffAbund_bulk_bac<-prune_taxa(differentialy_abundant_ASVs, unnormalized_BacFun_ps_l_bac_ps_filt_l$bulk_soil)
+
+#exchange species info per ASV ID
+ps_diffAbund_bulk_bac@tax_table[,7]<-taxa_names(ps_diffAbund_bulk_bac)
+
+# run the custom function. 
+heat_tree_dose_bulk<-phyloseq_to_heat_tree(ps_object = ps_diffAbund_bulk_bac,
+                                           sample_group = "frass_dose")
+
+heat_tree_source_bulk<-phyloseq_to_heat_tree(ps_object = ps_diffAbund_bulk_bac,
+                                             sample_group = "frass_source")
+
+heat_tree_treatment_bulk<-phyloseq_to_heat_tree(ps_object = ps_diffAbund_bulk_bac,
+                                                sample_group = "frass_treatment")
+
+heat_tree_matrix_bulk<-phyloseq_to_heat_tree(ps_object = ps_diffAbund_bulk_bac, #takes several minutes
+                                        sample_group = "frass_treatment_dose_source")
+
+#export the trees as pdf
+ggsave(heat_tree_dose_bulk, filename = "./Results/heat_tree_dose_bulk.pdf")
+ggsave(heat_tree_source_bulk, filename = "./Results/heat_tree_source_bulk.pdf")
+ggsave(heat_tree_treatment_bulk, filename = "./Results/heat_tree_treatment_bulk.pdf")
+ggsave(heat_tree_matrix_bulk, filename = "./Results/heat_tree_matrix_bulk.pdf")
+
+```
+
