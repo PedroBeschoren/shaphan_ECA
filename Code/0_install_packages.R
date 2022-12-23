@@ -1,11 +1,6 @@
 
-#ignore the next lines of text. 
+#ignore these:
 #testing connection to github
-
-
-
-#testing test test, test
-
 
 
 # install the packages that will be needed to isntall other packages
