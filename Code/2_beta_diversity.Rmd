@@ -139,7 +139,7 @@ CSS_bac_ps_filt_l<-CSS_bac_ps_sampletype_l[c(1,3)]
 # remove frass source N from samples
 CSS_bac_ps_filt_l<-lapply(CSS_bac_ps_filt_l, function(x){
   x<-subset_samples(x, frass_source != "N") # from frass source N
-  x<-prune_taxa(taxa_sums(otu_table(x)) > 0, x) # remove ASVs with zero coutns (tat is, ASVS that only show up on frass source N)
+  x<-prune_taxa(taxa_sums(otu_table(x)) > 0, x) # remove ASVs with zero counts (that is, ASVS that only show up on frass source N)
 return(x)
 })
 
@@ -186,7 +186,7 @@ beta dispersion is like multivatite homogeniety of variances. just like you can'
 #define function to calculate and plot beta dispersion
 beta_disp_plotAndTest<-function(phyloseq_list, group){
   # phyloseq_list = a list of phyloseq objects
-  # group = the variale you want to test the beta dispersion of, in quotes
+  # group = the variable you want to test the beta dispersion of, in quotes
     beta_disper_list<-lapply(phyloseq_list, function (x) 
   betadisper(phyloseq::distance(t(otu_table(x)), method="bray"), sample_data(x)[[group]])) #selects only column "group""
 
@@ -256,9 +256,10 @@ permanova_Bac_results <- lapply(CSS_bac_ps_filt_l, function (x)
 
 
 # Pairwise PERMANOVA 16S Stress factor
+
 set.seed(303848)
 pairwise_permanova_bac_results <- lapply(CSS_bac_ps_filt_l, function (x)
-  adonis.pair(dist.mat= phyloseq::distance(otu_table(x), method="bray"),
+  adonis2(dist.mat= phyloseq::distance(otu_table(x), method="bray"),
               Factor= as.factor(as(phyloseq::sample_data(x),"data.frame")$frass_treatment)))
 
 

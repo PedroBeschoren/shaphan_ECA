@@ -1,20 +1,20 @@
 
-#ignore these:
-#testing connection to github
-
-
-# install the packages that will be needed to isntall other packages
+# install the packages that will be needed to install other packages
 renv::restore(packages = c("devtools",
                            "BiocManager",
                            "remotes"))
 
+BiocManager::install("devtools")
+
 library("BiocManager")
+library("devtools")
+library("vegan")
+library(vegan)
 
-
-# POTENTIAL ERROR: ARE YOU MISSING "mkae"? 
+# POTENTIAL ERROR: ARE YOU MISSING "make"? 
 # install Rtools for R 4.0 as in https://cran.r-project.org/bin/windows/Rtools/rtools40.html,
 # then, if using windows, run this line to add rtools to the system path
-# write('PATH="${RTOOLS40_HOME}\\usr\\bin;${PATH}"', file = "~/.Renviron", append = TRUE)
+# write('PATH="${RTOOLS40_HOME}\\user\\bin;${PATH}"', file = "~/.Renviron", append = TRUE)
 # Sys.which("make")
 
 
@@ -31,6 +31,17 @@ renv::restore(packages = c( "ggplot2",
 renv::restore(packages = c( "metagenomeSeq",
                             "phyloseq",
                             "vegan"))
+
+# install packages separated
+BiocManager::install("phyloseq")
+BiocManager::install("vegan")
+BiocManager::install("EcolUtils") # failed
+BiocManager::install("microbiome")
+BiocManager::install("metagMisc") # failed
+devtools::install("metagMisc") # failed
+devtools::install_github("vmikk/metagMisc")
+devtools::install_github("GuillemSalazar/EcolUtils")
+
 
 
 # install all other packages

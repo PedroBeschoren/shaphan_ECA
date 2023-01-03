@@ -98,7 +98,7 @@ this sets ths pairwise comparisons you wnt to make
 pairwise_comparison<-list(
 c("frass_source", "X", "Y"),
 c("frass_treatment", "U", "C"), 
-c("frass_dose", "2", "3"))
+c("frass_dose", "2", "5")) # edited by replacing dose "3" with "5"
 
 ```
 ### 6 - make bulk soil pairwise comparisons
