@@ -16,6 +16,7 @@ library(phyloseq)
 library(ggplot2)
 library(vegan)
 library(tidyr)
+library(decontam)
 library("metagenomeSeq")
 
 
@@ -101,11 +102,11 @@ raw_bac_metadata<-sample_data(object = read.table(file = "./Data/16S_ECA_Mapping
 
 ## 1.2 - adjust 16S sample names
 
-The sample names on the OTU table do not match the sample names on the metadata. this will remove unecessary charathers from the sample anmes of the otu tables
+The sample names on the OTU table do not match the sample names on the metadata. this will remove unnecessary characters from the sample names of the otu tables
 
 ```{r}
 
-# remove any number of numeric charters([0-9]+) followed by the constant (_ID2577_16S-) and then any number of numeric chartaers up to and including a "-" ([0-9]+-)
+# remove any number of numeric characters([0-9]+) followed by the constant (_ID2577_16S-) and then any number of numeric chartaers up to and including a "-" ([0-9]+-)
 otutab_sampnames<-gsub("[0-9]+_ID2577_16S-[0-9]+-", "", phyloseq::sample_names(raw_bac_otutab)) 
 
 #now remove anything (*) after and includingthe dash (-) the dot indicates that * has a special meaning (matches any chartaer)
@@ -443,7 +444,8 @@ rm(unnormalized_bac_ps,unnormalized_fun_ps)
 #this is our list of objects
 unnormalized_BacFun_ps_l
 
-
+#backyp object
+unnormalized_BacFun_ps_l_backup<-unnormalized_BacFun_ps_l
 
 # let's make sure some key factors are recorded as factors, and numeric are saved as numeric
 unnormalized_BacFun_ps_l<-lapply(unnormalized_BacFun_ps_l, function (x){
