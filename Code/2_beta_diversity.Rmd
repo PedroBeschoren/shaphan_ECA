@@ -30,7 +30,8 @@ library(purrr)
 library(EcolUtils)
 
 
-# increases memory limit used by R
+# increases memory limit used by R. 
+# NOTE: This works on R 4.1.2 but not on R 4.2.2. if memory limits become a problem in R 4.2.2, figure a way to increase maximum memory usage
 memory.limit(size = 350000)
 
 
@@ -110,7 +111,8 @@ NMDS_calculation_l <- function(physeq_l, ordination_output) {
 }
 
 #use custom function, creating a list of plotsfunction
-NMDS_plots_l<-NMDS_calculation_l(CSS_bac_ps_sampletype_l, NMDS_Bac_l )
+NMDS_plots_l<-NMDS_calculation_l(physeq_l = CSS_bac_ps_sampletype_l, 
+                                 ordination_output = NMDS_Bac_l )
 NMDS_plots_l
 # arrange all 3 plots in a pannel
 NMDS_plots_l<-ggarrange(NMDS_plots_l$bulk_soil,
@@ -227,7 +229,8 @@ return(list(bet_disp_PCOa_plot,bet_disp_boxplot))
 
 
 # execute custom fucntion above
-beta_disp_plotAndTest(CSS_bac_ps_filt_l, "frass_source")
+beta_disp_plotAndTest(phyloseq_list = CSS_bac_ps_filt_l,
+                      group = "frass_source")
 beta_disp_plotAndTest(CSS_bac_ps_filt_l, "frass_dose")
 beta_disp_plotAndTest(CSS_bac_ps_filt_l, "frass_treatment")
 beta_disp_plotAndTest(CSS_bac_ps_filt_l, "frass_treatment_and_dose")
@@ -259,7 +262,7 @@ permanova_Bac_results <- lapply(CSS_bac_ps_filt_l, function (x)
 
 set.seed(303848)
 pairwise_permanova_bac_results <- lapply(CSS_bac_ps_filt_l, function (x)
-  adonis2(dist.mat= phyloseq::distance(otu_table(x), method="bray"),
+  adonis.pair(dist.mat= phyloseq::distance(otu_table(x), method="bray"),
               Factor= as.factor(as(phyloseq::sample_data(x),"data.frame")$frass_treatment)))
 
 
