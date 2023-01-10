@@ -76,8 +76,11 @@ return(x)
 ```{r}
 
 # make list of deseqed phyloseq objects ; crossing  model of 3 factors
-deseq_3add_l <- lapply (unnormalized_BacFun_ps_l_bac_ps_filt_l, function (x) phyloseq_to_deseq2(x, ~ frass_source*frass_treatment*frass_dose))
-deseq_3add_l <- lapply (deseq_3add_l, function (x) DESeq(x, test="Wald", fitType="parametric"))
+deseq_3add_l <- lapply (unnormalized_BacFun_ps_l_bac_ps_filt_l, function (x)
+  phyloseq_to_deseq2(x, ~ frass_source*frass_treatment*frass_dose))
+
+deseq_3add_l <- lapply (deseq_3add_l, function (x) 
+  DESeq(x, test="Wald", fitType="parametric"))
 
 # this unlisted, unsplit deseq2 object will be necessary to construct the heatmap
 ps_deseq <- phyloseq_to_deseq2(unnormalized_BacFun_ps_l_bac_ps_filt_l$bulk_soil, ~ frass_source * frass_treatment * frass_dose)
@@ -218,6 +221,14 @@ df_row<-mutate(df_row, main_order = if_else(main_Orders=="TRUE", df_row$Order, "
 pheatmap::pheatmap(log2.norm.countsb, color=viridis(24), annotation_col=df, annotation_row=df_row, main="log2(counts + 1)", 
                    scale="none", fontsize_row = 3, fontsize_col = 8)
 
+
+### SHAPHAN, SAVE NEW PDF FILE OF HEATMAP WITH ADJUSTED FRASS DOSE METADATA TYPO
+### SHAPHAN, RUN FOLLOWING HEAT TREES WITH ADJUSTED FRASS DOSE METADATA TYPO
+### SHAPHAN, EVALUATE THE HEAT TREES TO DESCRIBE MAIN DIFFERENCES AND INTERACTIONS (COARSE LEVEL; CHECK PAENIBACILLUS VS BACILACEAE)
+
+### SHPHAN, RUN THIS FULL ANALYSIS FOR RHIZOSPHERE SAMPLES
+
+###.... ADN THEN THE FUNGI!
 
 
 ```
