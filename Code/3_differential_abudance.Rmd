@@ -217,13 +217,20 @@ df_row$main_Orders<-df_row$Order %in%  names(Order_representation)[1:15]  # defi
 df_row<-mutate(df_row, main_order = if_else(main_Orders=="TRUE", df_row$Order, "Other" ))%>% # make new variable: if the family is on the lsit of families, add it to the new variale, if not wirte is as "Other"
   select(main_order) # remove old columns
 
-#now plot the ehatmap
-pheatmap::pheatmap(log2.norm.countsb, color=viridis(24), annotation_col=df, annotation_row=df_row, main="log2(counts + 1)", 
+#now plot the heatmap
+heatmp<-pheatmap::pheatmap(log2.norm.countsb, color=viridis(24), annotation_col=df, annotation_row=df_row, main="log2(counts + 1)", 
                    scale="none", fontsize_row = 3, fontsize_col = 8)
+heatmp
 
 
-### SHAPHAN, SAVE NEW PDF FILE OF HEATMAP WITH ADJUSTED FRASS DOSE METADATA TYPO
-### SHAPHAN, RUN FOLLOWING HEAT TREES WITH ADJUSTED FRASS DOSE METADATA TYPO
+ggsave(filename = "./Results/new_heatmap_bulk.pdf",
+       plot = heatmp,
+       width = 30,
+       height = 30,
+       units = "cm")
+
+
+
 ### SHAPHAN, EVALUATE THE HEAT TREES TO DESCRIBE MAIN DIFFERENCES AND INTERACTIONS (COARSE LEVEL; CHECK PAENIBACILLUS VS BACILACEAE)
 
 ### SHPHAN, RUN THIS FULL ANALYSIS FOR RHIZOSPHERE SAMPLES
@@ -240,18 +247,18 @@ pheatmap::pheatmap(log2.norm.countsb, color=viridis(24), annotation_col=df, anno
 
 
 
-#defien a function that takes a phyloseq object and returns heat trees
+#define a function that takes a phyloseq object and returns heat trees
 phyloseq_to_heat_tree<-function(ps_object, sample_group){
   
-  # this function output is a heat trees comparing metadata. the input is based on a phyloseq object
+  # this function output is a heat tree comparing metadata. the input is based on a phyloseq object
   
-  # ps object =  a phyloseq object, containing sample metadata, otu table, and taxonomy table
-  # sample_group = the name of a column in your emtadata that you want to compare in the heat tree. it has to be quoted.
+  # ps object =  a phyloseq object, containing sample metadata, OTU table, and taxonomy table
+  # sample_group = the name of a column in your metadata that you want to compare in the heat tree. it has to be quoted.
   
   # this function will create a matrix of heat trees if your metadata has more than 2 groups. it should fail if it has only 1 group
   
 
-#remove unecessary taxonomic info (dada2id, "s__" and "ASV_id) by updating the tax table with a subset of the tax table
+#remove unnecessary taxonomic info (dada2id, "s__" and "ASV_id) by updating the tax table with a subset of the tax table
 tax_table(ps_object)<-tax_table(ps_object)[,1:7]
 
 
@@ -354,10 +361,22 @@ heat_tree_matrix_bulk<-phyloseq_to_heat_tree(ps_object = ps_diffAbund_bulk_bac, 
                                         sample_group = "frass_treatment_dose_source")
 
 #export the trees as pdf
-ggsave(heat_tree_dose_bulk, filename = "./Results/heat_tree_dose_bulk.pdf")
-ggsave(heat_tree_source_bulk, filename = "./Results/heat_tree_source_bulk.pdf")
-ggsave(heat_tree_treatment_bulk, filename = "./Results/heat_tree_treatment_bulk.pdf")
-ggsave(heat_tree_matrix_bulk, filename = "./Results/heat_tree_matrix_bulk.pdf")
+ggsave(heat_tree_dose_bulk, filename = "./Results/heat_tree_dose_bulk.pdf",
+       width = 30,
+       height = 30,
+       units = "cm")
+ggsave(heat_tree_source_bulk, filename = "./Results/heat_tree_source_bulk.pdf",
+       width = 30,
+       height = 30,
+       units = "cm")
+ggsave(heat_tree_treatment_bulk, filename = "./Results/heat_tree_treatment_bulk.pdf",
+       width = 30,
+       height = 30,
+       units = "cm")
+ggsave(heat_tree_matrix_bulk, filename = "./Results/heat_tree_matrix_bulk.pdf",
+       width = 30,
+       height = 30,
+       units = "cm")
 
 ```
 
