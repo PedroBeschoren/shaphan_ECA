@@ -9,7 +9,7 @@ BiocManager::install("devtools")
 library("BiocManager")
 library("devtools")
 library("vegan")
-library(vegan)
+library("locfit")
 
 # POTENTIAL ERROR: ARE YOU MISSING "make"? 
 # install Rtools for R 4.0 as in https://cran.r-project.org/bin/windows/Rtools/rtools40.html,
@@ -41,7 +41,10 @@ BiocManager::install("metagMisc") # failed
 devtools::install("metagMisc") # failed
 devtools::install_github("vmikk/metagMisc")
 devtools::install_github("GuillemSalazar/EcolUtils")
-
+BiocManager::install("metagenomeSeq")
+BiocManager::install("DESeq2")
+BiocManager::install("locfit")
+BiocManager::install("DelayedArray")
 
 
 # install all other packages
