@@ -2,13 +2,17 @@
 title: "1_load_normalize"
 author: "shaphan"
 date: "11/17/2022"
-output: html_document
-editor_options: 
-  chunk_output_type: console
+pdf_document: default
+html_document: default
+     toc: true
+     keep_md: true
+editor_options: null
+chunk_output_type: console
 ---
 
 
 # 0 - load libraries
+## Remove contaminant sequences data to improve taxonomic representation in samples 
 ```{r}
 
 #load necessary libraries
@@ -34,8 +38,8 @@ source("./Code/functions_loading_and_decontamination.R")
 ```{r}
 
 
+# loads the OTU table, immediately saving it as a phyloseq OTU table (lighter than a data frame)
 
-# loads the OTU table, immediatetly saving it as a phyloseq OTU table (lighter than a data frame)
 raw_bac_otutab<-otu_table(object = read.table(file = "./Data/16S_ECA_seqtab_final.txt",
                                               header = TRUE,
                                               row.names = 1, # first column has row names (ASV names)
@@ -49,8 +53,8 @@ sample_sums(raw_bac_otutab)%>%sum
 sklearn_bac_taxtab<-read.table(file = "./Data/16S_ECA_taxonomy.tsv",
                                header = TRUE,
                                sep = "\t",
-                               row.names = 1, # first column has row names (ASV names)
-                               check.names = FALSE) # prevents "X" to be added to column names, such as X49_16S,
+                               row.names = 1,
+                               check.names = FALSE)
 
 
 
@@ -67,15 +71,12 @@ sklearn_bac_taxtab<- separate(data = sklearn_bac_taxtab,
                               sep = "; ")
 
 
-
-# change from d__Bacteria to k__bacteria, mathcing fungi dataset
+# change from d__Bacteria to k__bacteria
 sklearn_bac_taxtab$Kingdom<-gsub("d__", "k__", sklearn_bac_taxtab$Kingdom)
 
 
-
-# saves taxa as phyloseq object
+# save taxa as phyloseq object
 sklearn_bac_taxtab<-tax_table(object = as.matrix(sklearn_bac_taxtab))
-
 
 
 #change name and remove old object
@@ -83,38 +84,40 @@ raw_bac_taxtab<-sklearn_bac_taxtab
 rm(sklearn_bac_taxtab)
 
 
+# loads the representative sequences table, immediately saving it as a phyloseq OTU table (lighter than a data frame)
 
-# loads the representative sequences table, immediatetly saving it as a phyloseq OTU table (lighter than a df)
 raw_bac_refseq<-refseq(physeq = Biostrings::readDNAStringSet(filepath = "./Data/16S_ECA_repset.fasta", use.names = TRUE))
 taxa_names(raw_bac_refseq)<-gsub(" .*", "", taxa_names(raw_bac_refseq)) # drops taxonomy from ASV names
 
 
-
-# loads the mapping tile, immediatetly saving it as a phyloseq OTU table (lighter than a df)
+# loads the mapping tile, immediately saving it as a phyloseq OTU table (lighter than a df)
 raw_bac_metadata<-sample_data(object = read.table(file = "./Data/16S_ECA_Mapping_file.txt",
                                                   header = TRUE,
                                                   sep = "\t",
-                                                  row.names = 1, # first column has row names (ASV names)
-                                                  check.names = FALSE)) # prevents "X" to be added to column names, such as X49_16S,
-
+                                                  row.names = 1,
+                                                  check.names = FALSE))
 
 ```
 
 ## 1.2 - adjust 16S sample names
 
-The sample names on the OTU table do not match the sample names on the metadata. this will remove unnecessary characters from the sample names of the otu tables
+The sample names on the OTU table do not match the sample names on the metadata. this will remove unnecessary characters from the sample names on the otu tables
 
 ```{r}
 
-# remove any number of numeric characters([0-9]+) followed by the constant (_ID2577_16S-) and then any number of numeric chartaers up to and including a "-" ([0-9]+-)
-otutab_sampnames<-gsub("[0-9]+_ID2577_16S-[0-9]+-", "", phyloseq::sample_names(raw_bac_otutab)) 
+# remove any number of numeric characters([0-9]+) followed by the constant (_ID2577_16S-) and then any number of numeric characters up to and including a "-" ([0-9]+-)
 
-#now remove anything (*) after and includingthe dash (-) the dot indicates that * has a special meaning (matches any chartaer)
+otutab_sampnames<-gsub("[0-9]+_ID2577_16S-[0-9]+-", "", phyloseq::sample_names(raw_bac_otutab))
+
+
+#now remove anything (*) after and including the dash (-) the dot indicates that * has a special meaning (matches any character)
+
 otutab_sampnames<-gsub("-.*", "", otutab_sampnames)
 
-#overwrite the old sample names with the correct (short) version that was just created
-phyloseq::sample_names(raw_bac_otutab)<-otutab_sampnames
 
+#overwrite the old sample names with the correct (short) version that was just created
+
+phyloseq::sample_names(raw_bac_otutab)<-otutab_sampnames
 
 
 #check dimensions
@@ -127,28 +130,28 @@ dim(raw_bac_metadata)
 
 ```{r}
 # build the main 16S phyloseq object by putting all these phyloseq-class objects (otu table, tax table, ref seq, metadta) into a single ps
+
 raw_bac_ps<-merge_phyloseq(raw_bac_otutab,
                            raw_bac_taxtab,
                            raw_bac_refseq,
                            raw_bac_metadata)
 
-#are tehre missing samples?
+#Are there missing samples?
 sample_names(raw_bac_otutab)[which(!sample_names(raw_bac_otutab) %in%  sample_names(raw_bac_ps) )]
-
 
 
 # remove old objects to reduce memory use
 rm(raw_bac_otutab,raw_bac_taxtab,raw_bac_refseq,raw_bac_metadata)
 
 
-
 # change names from ASV to  bASV, so they can be distinguished from bacterial ASVs
+
 taxa_names(raw_bac_ps)<-paste("b", taxa_names(raw_bac_ps), sep = "")
 tax_table(raw_bac_ps)<-gsub(" ", "", tax_table(raw_bac_ps)) # drops a space character from taxa names. I don't know how that character ended up in there
 
 
-
 # let's check the imported objects. Often errors will arise from typos when filling up the data sheets
+
 otu_table(raw_bac_ps)[1:10,1:10]
 sample_data(raw_bac_ps)[1:10,1:10]
 tax_table(raw_bac_ps)[1:10,1:6]
@@ -157,45 +160,37 @@ refseq(raw_bac_ps)
 # run garbage collection after creating large objects
 gc()
 
-
-
 ```
 
-
 ## 1.4 - remove bad Bac taxa
+
 ```{r}
-# here we see that sequences of only 50bp were still retained by the updated dada2 pipeline
+
+# here we see that sequences of only 50 base pairs (bp) were still retained by the updated dada2 pipeline
 hist(as.data.frame(refseq(raw_bac_ps)@ranges)$width, breaks = 300)
 summary(as.data.frame(refseq(raw_bac_ps)@ranges)$width) # ps = phyloseq
 
 
-
-# here we get rid of sequences shorter than 380bp. this reduced the total number of taxa by ~4k (from 384089 to 380244 taxa )
+# here we get rid of sequences shorter than 380 bp. this reduced the total number of taxa by ~ 4k (from 384089 to 380244 taxa)
 raw_bac_ps<-prune_taxa(taxa = as.data.frame(refseq(raw_bac_ps)@ranges)$width>380,
                        x = raw_bac_ps)
 
 
-
-# keeps only ASVs identified as bacterial
+# keep only ASVs identified as bacterial
 raw_bac_ps<-subset_taxa(raw_bac_ps, Kingdom=="k__Bacteria") # drops from 380244 to 380019 taxa, barely any difference
-
 
 
 # define library sizes as metadata before filtering
 raw_bac_ps@sam_data$library_sizes_prefiltering<-sample_sums(raw_bac_ps)
 
 
-
-# removes taxa occurring less than 8 times in the data set, as VSEARCH standard
-otu_table(raw_bac_ps) <- otu_table(raw_bac_ps)[which (rowSums(otu_table(raw_bac_ps)) > 21),]  #drops from 380K to 168K taxa, from 222M to 221M sequences (843k sequences removed)
-
+# remove taxa occurring less than 21 times in the data set, as VSEARCH standard
+otu_table(raw_bac_ps) <- otu_table(raw_bac_ps)[which (rowSums(otu_table(raw_bac_ps)) > 21),] # drops from 380K to 168K taxa, from 222M to 221M sequences (843k sequences removed)
 
 
-
-# filter ASV according samples (min 0 reads, present in 3 samples)
+# filter ASV according samples (min 0 reads, present in 7 samples)
 filter <- phyloseq::genefilter_sample(raw_bac_ps, filterfun_sample(function(x) x > 0), A = 7)
 raw_bac_ps <- prune_taxa(filter, raw_bac_ps) #drops from 168k to 72k taxa, drops from 221M  to 219M reads
-
 
 
 #define plastid, mitochondria and host plant contamination ps objects
@@ -204,11 +199,8 @@ Plastid_ps<-subset_taxa(raw_bac_ps, Order == "o__Chloroplast" | Order == "Chloro
 host_plant_ps<-merge_phyloseq(Mitochondria_ps,Plastid_ps)
 
 
-
 #quick histogram showing plant DNA contamination
 hist(sample_sums(host_plant_ps)/sample_sums(raw_bac_ps)*100, breaks = 100)
-
-
 
 # define host plant 16S contamination as metadata
 raw_bac_ps@sam_data$Mitochondria_reads<-sample_sums(Mitochondria_ps)
@@ -217,32 +209,32 @@ raw_bac_ps@sam_data$Host_DNA_n_reads<-sample_sums(host_plant_ps)
 raw_bac_ps@sam_data$Host_DNA_contamination_pct<-sample_sums(host_plant_ps)/sample_sums(raw_bac_ps)*100
 
 
-
-# remove plant host sequences (plastid and mitochndrial DNA)
+# remove host plant sequences (plastid and mitochondrial DNA)
 raw_bac_ps<-remove_Chloroplast_Mitochondria(raw_bac_ps) # drops from 72k to 69.9k taxa, from 219M to 121M reads (almost 45% of our 16S sequencing effort! that's about 12k Euro!)
 
 
-#rename ps object
+# Rename ps object
 unnormalized_bac_ps<-raw_bac_ps
 raw_bac_ps<-unnormalized_bac_ps
 
+
 # run garbage collection after creating large objects
 gc()
+
 ```
 
 # 2 - prepare ITS data
 
-## 2.1 - load ITS data and build Fun phyloseq object
+## 2.1 - load ITS data and build Fungi (Fun) phyloseq object
 
 ```{r}
 
-# loads the OTU table, immediatetly saving it as a phyloseq OTU table (lighter than a df)
+# loads the OTU table, immediately saving it as a phyloseq OTU table (lighter than a df)
 raw_fun_otutab<-otu_table(object = read.table(file = "./Data/ITS_ECA_seqtab_final.txt", 
                                               header = TRUE,
                                               row.names = 1, # first column has row names (ASV names)
                                               check.names = FALSE), # prevents "X" to be added to column names, such as X49_ITS,
                            taxa_are_rows = TRUE)
-
 
 
 #updated tax
@@ -267,33 +259,32 @@ sklearn_fun_taxtab<- separate(data = sklearn_fun_taxtab,
 # saves taxa as phyloseq object
 sklearn_fun_taxtab<-tax_table(object = as.matrix(sklearn_fun_taxtab))
 
-# renames object, remve old version7
+# rename object, remove old versions
 raw_fun_taxtab<-sklearn_fun_taxtab
 rm(sklearn_fun_taxtab)
 
 
-
-# loads the representative sequences table, immediatetly saving it as a phyloseq OTU table (lighter than a df)
+# load the representative sequences table, immediately saving it as a phyloseq OTU table (lighter than a df)
 raw_fun_refseq<-refseq(physeq = Biostrings::readDNAStringSet(filepath = "./Data/ITS_ECA_repset.fasta", use.names = TRUE)) 
-taxa_names(raw_fun_refseq)<-gsub(" .*", "", taxa_names(raw_fun_refseq)) # drops taxonomy from ASV names
+taxa_names(raw_fun_refseq)<-gsub(" .*", "", taxa_names(raw_fun_refseq)) 
 
-# loads the mapping tile, immediatetly saving it as a phyloseq OTU table (lighter than a df)
+# loads the mapping tile, immediately saving it as a phyloseq OTU table (lighter than a df)
 raw_fun_metadata<-sample_data(object = read.table(file = "./Data/ITS_ECA_Mapping_file.txt", 
                                                   header = TRUE,
                                                   sep = "\t",
-                                                  row.names = 1, # first column has row names (ASV names)
-                                                  check.names = FALSE)) # prevents "X" to be added to column names, such as X49_ITS,
-
+                                                  row.names = 1, 
+                                                  check.names = FALSE))
 ```
 
 ## 2.2 - adjust ITS sample names
 
 ```{r}
+
 #adjust sample names
-# remove any number of numeric charters([0-9]+) followed by the constant (_ID2577_ITS-) and then any number of numeric chartaers up to and including a "-" ([0-9]+-)
+# remove any number of numeric charters([0-9]+) followed by the constant (_ID2577_ITS-) and then any number of numeric characters up to and including a "-" ([0-9]+-)
 otutab_sampnames<-gsub("[0-9]+_ID2577_ITS-[0-9]+-", "", phyloseq::sample_names(raw_fun_otutab)) 
 
-#now remove anything (*) after and includingthe dash (-) the dot indicates that * has a special meaning (matches any chartaer)
+#now remove anything (*) after and including the dash (-) the dot indicates that * has a special meaning (matches any character)
 otutab_sampnames<-gsub("-.*", "", otutab_sampnames)
 
 #overwrite the old sample names with the correct (short) version that was just created
@@ -308,10 +299,9 @@ phyloseq::sample_names(raw_fun_otutab)<-otutab_sampnames
 dim(raw_fun_otutab)
 dim(raw_fun_metadata)
 
-#fungi has 383 samples on otu table instead of 404, is it expected?
+#fungi has 383 samples on otu table instead of 404, is it expected? I think so because the raw sequences equal 766 (single reads) = 766/2 = 383 combined reads (samples). 
 
-
-# build the main ITS phyloseq object by putting all these phyloseq-class objects (otu table, tax table, ref seq, metadta) into a single ps
+# build the main ITS phyloseq object by putting all these phyloseq-class objects (otu table, tax table, ref seq, metadata) into a single ps
 raw_fun_ps<-merge_phyloseq(raw_fun_otutab,
                            raw_fun_taxtab,
                            raw_fun_refseq,
@@ -329,75 +319,67 @@ sample_data(raw_fun_ps)[1:10,1:10]
 tax_table(raw_fun_ps)[1:10,1:7]
 refseq(raw_fun_ps)
 
-
-
 # run garbage collection after creating large objects
 gc()
 
 ```
 
-
-
-
-
 ## 2.4 - Remove non-fungal sequences & filter ASVs
-  * ~5.17 of total reads are plant ITS
+  * ~5.17% of total reads are plant ITS
   * ~5.77% of total reads are protozoa ITS
   * ~9.92% of ITS reads are unidentified
 
 ```{r}
 
-
 # define library sizes as metadata before filtering
 raw_fun_ps@sam_data$library_sizes_prefiltering<-sample_sums(raw_fun_ps)
 
-# removes taxa occuring less than 8 times in the dataser, as VSEARCH standard
+# removes taxa occurring less than 21 times in the database, as VSEARCH standard
 otu_table(raw_fun_ps) <- otu_table(raw_fun_ps)[which (rowSums(otu_table(raw_fun_ps)) > 21),]  #drops from 15.5K to 14.1K taxa, only 6K reads removed
 
-# filter  samples (min 0 reads, present in 3 samples)
+
+# filter  samples (min 0 reads, present in 7 samples)
 filter <- phyloseq::genefilter_sample(raw_fun_ps, filterfun_sample(function(x) x > 0), A = 7) 
 raw_fun_ps <- prune_taxa(filter, raw_fun_ps) #drops from 14.1k to 3.1k taxa, drops from 206M  to 195M reads
 rm(filter) # we no longer need this string
 
+
 # removes g__Malassezia, a known human pathogen (saunders et al 2012, https://journals.plos.org/plospathogens/article?id=10.1371/journal.ppat.1002701)
 raw_fun_ps<-prune_taxa(!(taxa_names(raw_fun_ps) %in% taxa_names(subset_taxa(raw_fun_ps, Genus=="g__Malassezia"))), raw_fun_ps) 
-
-
-
-
-
-
 
 # take  all plant ITS sequences here to calculate host contamination
 raw_PlantITS_ps<-subset_taxa(raw_fun_ps, Kingdom=="k__Viridiplantae") 
 
+
 # keeps only ASVs identified as fungal
 raw_fun_ps<-subset_taxa(raw_fun_ps, Kingdom=="k__Fungi") # drops from 18.5K to 15.5K taxa, from 206M reads to 201M reads
 
-# define ITS host contamination as sample emtadata
+
+# define ITS host contamination as sample metadata
 raw_fun_ps@sam_data$Host_DNA_contamination_pct<-sample_sums(raw_PlantITS_ps)/sample_sums(raw_fun_ps)*100
 raw_fun_ps@sam_data$Host_DNA_n_reads<-sample_sums(raw_PlantITS_ps)
 
-#check final sequence lenght. ITS sequences smaller than 100bp should be discarded
+
+#check final sequence length. ITS sequences smaller than 100bp should be discarded
 summary(raw_fun_ps@refseq@ranges@width)
+
 
 # add library sizes as part of metadata
 sample_data(raw_fun_ps)$library_size<-sample_sums(raw_fun_ps)
 
 
-#remove unecessary objects and collect garbage
+#remove unnecessary objects and collect garbage
 rm(raw_PlantITS_ps)
 gc()
 
-
 ```
 
-
-# 3 - decontaminate fungi and bacteria
+# 3 - Decontaminate fungi and bacteria
 ```{r}
 
 #samples present in bac but missing in Fun
 sample_names(raw_bac_ps)[!(sample_names(raw_bac_ps)  %in% sample_names(raw_fun_ps))]
+
 
 #decontaminate!
 unnormalized_bac_ps<-decontaminate_and_plot(raw_bac_ps)
@@ -409,6 +391,7 @@ checm@tax_table
 checm@otu_table
 sample_sums(checm)
 
+
 # let's look into how many reads our blank had (average+sd) so we can compare those to libraries with very low number of reads
 blank_reads_bac<-sort(sample_sums(subset_samples(raw_bac_ps, sample == "MOCK")))
 plot(blank_reads_bac)
@@ -417,7 +400,8 @@ plot(blank_reads_bac)
 blank_reads_fun<-sort(sample_sums(subset_samples(raw_fun_ps, sample == "MOCK")))
 plot(blank_reads_fun)
 
-# after checking the decontamination plots and reports, we can remove them and focus on the phyloseq oject
+
+# after checking the decontamination plots and reports, we can remove them and focus on the phyloseq object
 unnormalized_bac_ps<-unlist(unnormalized_bac_ps[[1]])
 unnormalized_fun_ps<-unlist(unnormalized_fun_ps[[1]])
 
