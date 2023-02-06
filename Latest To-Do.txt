@@ -1,0 +1,13 @@
+Prepare final (or near-final) plots(figures) and statistics for the manuscript:
+* Community diversity measures:
+- beta diversity = quantifies (dis-) similarites between samples
+_ alpha diversity = variation within a samples: species richness (number of taxa), evenness (the relative abundances of taxa), Phylogenetic diversity, Dominance, etc. within samples
+
+* regress plant growth data with number of ASVs/prominent taxa: e.g., species richness vs leaf area or shoot weight or plant nutrient content, etc.
+* get better versions of the heat trees (identify key differences or messages)
+* get better versions of the alphacorr plots
+* is there a valid reason (from the data) to focus attention on one of the doses (2 g or 5 g), for example, in producing the heat tree_matrix? If only it makes sense!
+* explore best taxa rank for easy view/identification of difference in the heat tree trees and heat maps: i.e., do we end at the Family or Order level?
+* any other aspect that would be best for the data
+
+
