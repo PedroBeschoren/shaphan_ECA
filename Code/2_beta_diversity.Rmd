@@ -29,13 +29,9 @@ library("ggpubr")
 library(purrr)
 library(EcolUtils)
 
-<<<<<<< HEAD
-# increases memory limit used by R
-=======
 
 # increases memory limit used by R. 
 # NOTE: This works on R 4.1.2 but not on R 4.2.2. if memory limits become a problem in R 4.2.2, figure a way to increase maximum memory usage
->>>>>>> 3e1df8c7898950fd6f13396e0e3f20791701a716
 memory.limit(size = 350000)
 
 
@@ -44,44 +40,22 @@ memory.limit(size = 350000)
 load(file = "./Data/CSS_BacFun_ps_l.RData")
 
 
-
-CSS_BacFun_ps_l
-
-
 ```
 
-
-acessing and maanipulating lists
-```{r}
-CSS_BacFun_ps_l
-
-
-CSS_BacFun_ps_l$Bac
-CSS_BacFun_ps_l[1]
-str(CSS_BacFun_ps_l[[2]])
-
-lapply(CSS_BacFun_ps_l, function(x)
-  otu_table(x)[1:10,1:10])
-
-
-```
 
 
 #separate bulk soil from rhizosphere and frass
 ```{r}
 #split by sample type
-CSS_bac_ps_sampletype_l<-metagMisc::phyloseq_sep_variable(CSS_BacFun_ps_l$Bac, variable = "sample_type")
+CSS_bacfun_ps_sampletype_l<-lapply(CSS_BacFun_ps_l, function (x)
+  metagMisc::phyloseq_sep_variable(x, variable = "sample_type"))
 
-# remove bulk soil outlier
-CSS_bac_ps_sampletype_l$bulk_soil<-subset_samples(CSS_bac_ps_sampletype_l$bulk_soil, sample_names(CSS_bac_ps_sampletype_l$bulk_soil) !="93B")
-               
-               
+# remove bulk soil bac outlier
+CSS_bacfun_ps_sampletype_l$Bac$bulk_soil<-subset_samples(CSS_bacfun_ps_sampletype_l$Bac$bulk_soil, sample_names(CSS_bacfun_ps_sampletype_l$Bac$bulk_soil) !="93B")
+ 
+# remove rhizosphere  fun outlier              
+CSS_bacfun_ps_sampletype_l$Fun$rhizosphere<-subset_samples(CSS_bacfun_ps_sampletype_l$Fun$rhizosphere, sample_names(CSS_bacfun_ps_sampletype_l$Fun$rhizosphere) !="176R")         
             
-
-
-
-# split fun by sample type
-CSS_fun_ps_sampletype_l<-metagMisc::phyloseq_sep_variable(CSS_BacFun_ps_l$Fun, variable = "sample_type")
 
 
 
@@ -94,13 +68,13 @@ Some clustering and treatment effects are evident!
 ```{r}
 
 # calculate ordinations
-NMDS_Bac_l <-lapply(CSS_bac_ps_sampletype_l, function (x)
-          ordinate(x,
+NMDS_BacFun_l <-lapply(CSS_bacfun_ps_sampletype_l, function (x)
+  lapply(x, function(y)
+          ordinate(y,
                    method="NMDS",
                    distance="bray",
                    try=2000,
-                   autotransform=TRUE))
-
+                   autotransform=TRUE)))
 
 
 
@@ -119,7 +93,7 @@ NMDS_calculation_l <- function(physeq_l, ordination_output) {
       scale_shape_manual(values=c(1,2,16, 17,7,8))+
       theme_classic() +
       labs(subtitle = paste("Stress", round(y$stress, digits=4))) +
-      theme(plot.title = element_text(size = 10, face = "bold")) +
+      theme(plot.title = element_text(size = 10, face = "bold")) + # extarcts on where this is Bac or Fun, add to plot title
       theme(legend.position="right"),
     x = physeq_l,
     y = ordination_output,
@@ -127,8 +101,8 @@ NMDS_calculation_l <- function(physeq_l, ordination_output) {
   
   
   
-  
-  titles_l <- names(physeq_l)
+  # adds firt taxonomic rank of first ps object as part of the tittle (Bac or Fun)
+  titles_l <- paste(names(physeq_l), unique(as.character(physeq_l[[1]]@tax_table[,1])))
   
   
   
@@ -142,21 +116,33 @@ NMDS_calculation_l <- function(physeq_l, ordination_output) {
 }
 
 #use custom function, creating a list of plotsfunction
-NMDS_plots_l<-NMDS_calculation_l(physeq_l = CSS_bac_ps_sampletype_l, 
-                                 ordination_output = NMDS_Bac_l )
-NMDS_plots_l
+NMDS_Bac_l<-NMDS_calculation_l(physeq_l = CSS_bacfun_ps_sampletype_l$Bac, 
+                               ordination_output = NMDS_BacFun_l$Bac )
 
+NMDS_Fun_l<-NMDS_calculation_l(physeq_l = CSS_bacfun_ps_sampletype_l$Fun, 
+                               ordination_output = NMDS_BacFun_l$Fun )
 
 
 # arrange all 3 plots in a pannel
-NMDS_plots_l<-ggarrange(NMDS_plots_l$bulk_soil,
-                        NMDS_plots_l$rhizosphere,
-                        NMDS_plots_l$frass)
+NMDS_Bac_l<-ggarrange(NMDS_Bac_l$bulk_soil,
+                        NMDS_Bac_l$rhizosphere,
+                        NMDS_Bac_l$frass)
+
+NMDS_Fun_l<-ggarrange(NMDS_Fun_l$bulk_soil,
+                        NMDS_Fun_l$rhizosphere,
+                        NMDS_Fun_l$frass)
+
 
 
 #export plot
-ggsave(filename = "./Results/NMDS_3_sample_types.pdf" ,
-       plot = NMDS_plots_l,
+ggsave(filename = "./Results/NMDS_Bac_3_sample_types.pdf" ,
+       plot = NMDS_Bac_l,
+       width = 30,
+       height =30,
+       units = "cm" )
+
+ggsave(filename = "./Results/NMDS_Fun_3_sample_types.pdf" ,
+       plot = NMDS_Fun_l,
        width = 30,
        height =30,
        units = "cm" )
@@ -166,46 +152,59 @@ ggsave(filename = "./Results/NMDS_3_sample_types.pdf" ,
 ```
 
 
-#filter samples and recalcuate ordintions
+## 1.1 filter samples and recalcuate ordintions
 
 ```{r}
 # remove frass sample type from list
-CSS_bac_ps_filt_l<-CSS_bac_ps_sampletype_l[c(1,3)]
+CSS_bacfun_BulkRhizo_ps_l<-lapply(CSS_bacfun_ps_sampletype_l, function (x) x[c(1,3)])
 
 # remove frass source N from samples
-CSS_bac_ps_filt_l<-lapply(CSS_bac_ps_filt_l, function(x){
+CSS_bacfun_BulkRhizo_ps_l<-lapply(CSS_bacfun_BulkRhizo_ps_l, function(y)
+  lapply(y, function(x){
   x<-subset_samples(x, frass_source != "N") # from frass source N
   x<-prune_taxa(taxa_sums(otu_table(x)) > 0, x) # remove ASVs with zero counts (that is, ASVS that only show up on frass source N)
 return(x)
-})
+}))
 
 
-
-
-NMDS_Bac_filt_l <-lapply(CSS_bac_ps_filt_l, function (x)
-          ordinate(x,
+# calculate ordinations
+NMDS_BacFun_BUlkRhizo_l <-lapply(CSS_bacfun_BulkRhizo_ps_l, function (x)
+  lapply(x, function(y)
+          ordinate(y,
                    method="NMDS",
                    distance="bray",
                    try=2000,
-                   autotransform=TRUE))
+                   autotransform=TRUE)))
+
 
 
 #use custom function, creating a list of plotsfunction
-NMDS_plots_filt_l<-NMDS_calculation_l(CSS_bac_ps_filt_l, NMDS_Bac_filt_l )
-NMDS_plots_filt_l
+NMDS_Bac_l<-NMDS_calculation_l(physeq_l = CSS_bacfun_BulkRhizo_ps_l$Bac, 
+                               ordination_output = NMDS_BacFun_BUlkRhizo_l$Bac )
+
+NMDS_Fun_l<-NMDS_calculation_l(physeq_l = CSS_bacfun_BulkRhizo_ps_l$Fun, 
+                               ordination_output = NMDS_BacFun_BUlkRhizo_l$Fun )
+
 
 # arrange all 3 plots in a pannel
-NMDS_plots_filt_l<-ggarrange(NMDS_plots_filt_l$bulk_soil,
-                            NMDS_plots_filt_l$rhizosphere)
+NMDS_BacFun_l<-ggarrange(NMDS_Bac_l$bulk_soil,
+                        NMDS_Bac_l$rhizosphere,
+                        NMDS_Fun_l$bulk_soil,
+                        NMDS_Fun_l$rhizosphere)
 
 
 
 #export plot
-ggsave(filename = "./Results/NMDS_RhizoBulk_types.pdf" ,
-       plot = NMDS_plots_filt_l,
-       width = 40,
-       height = 20,
+ggsave(filename = "./Results/NMDS_BacFun_BulkRhizo.pdf" ,
+       plot = NMDS_BacFun_l,
+       width = 30,
+       height =30,
        units = "cm" )
+
+
+
+
+
 
 ```
 
@@ -215,6 +214,10 @@ ggsave(filename = "./Results/NMDS_RhizoBulk_types.pdf" ,
 # 2 - check beta dispersion
 
 beta dispersion is like multivatite homogeniety of variances. just like you can't compare properly very small error bars with very large error bars, you should check if the spread of the data clouds is similar per treatment
+
+Beta dispersion of fungal rhizosphere differed by frass source
+Beta dispersion of bacterial bulk soil and rhizosphere differed by frass source
+other beta dispersions where similar, specially when all 4 factors are falttened and laid next to each other
 
 
 ```{r}
@@ -250,24 +253,19 @@ bet_disp_PCOa_plot<-mapply(function (x,y,z)
   z = p_dispersion,
   SIMPLIFY = FALSE) 
 
-#runs anova on beta dispersions
-bet_disp_boxplot<-mapply(function (x,y) 
-  boxplot(x, main = y),
-  x = beta_disper_list,
-  y = tiles_list,
-  SIMPLIFY = FALSE)
 
-
-return(list(bet_disp_PCOa_plot,bet_disp_boxplot))
+return(bet_disp_PCOa_plot)
 }
 
 
 # execute custom fucntion above
-beta_disp_plotAndTest(phyloseq_list = CSS_bac_ps_filt_l,
-                      group = "frass_source")
-beta_disp_plotAndTest(CSS_bac_ps_filt_l, "frass_dose")
-beta_disp_plotAndTest(CSS_bac_ps_filt_l, "frass_treatment")
-beta_disp_plotAndTest(CSS_bac_ps_filt_l, "frass_treatment_and_dose")
+
+lapply(CSS_bacfun_BulkRhizo_ps_l, function(x) beta_disp_plotAndTest(x, "frass_source"))
+lapply(CSS_bacfun_BulkRhizo_ps_l, function(x) beta_disp_plotAndTest(x, "frass_dose"))
+lapply(CSS_bacfun_BulkRhizo_ps_l, function(x) beta_disp_plotAndTest(x, "frass_treatment"))
+lapply(CSS_bacfun_BulkRhizo_ps_l, function(x) beta_disp_plotAndTest(x, "frass_treatment_and_dose"))
+
+
 
 
 
@@ -277,27 +275,20 @@ beta_disp_plotAndTest(CSS_bac_ps_filt_l, "frass_treatment_and_dose")
 
 # 3 - run PERMANOVA and post-hoc test
 
-We see significant treatment effects, with clear pairwise distinctions
+We see significant treatment effects, with clear pairwise distinctions, all across the board (bac, fun, rhizo, bulk, interactions...) all experimental factors and their interactions influence microbial community composition in both niches for both kingdoms!
+
+as tehre are only 2 levels per factor, post-hoc tests are not encessary
 
 
 
 ```{r}
-#testing permanovas 16S
+#testing permanovas 16S and ITS
 set.seed(303848)
-permanova_Bac_results <- lapply(CSS_bac_ps_filt_l, function (x)
+permanova_BacFun_results <- lapply(CSS_bacfun_BulkRhizo_ps_l, function (y)
+  lapply(y, function(x)
        adonis2(formula = phyloseq::distance(t(otu_table(x)), method="bray") ~ frass_treatment*frass_source*frass_dose,
               data = as(sample_data(x),"data.frame"), # changing with as.data.frame is insufficient
-              permutations = how(nperm=999)))
-
-
-
-
-# Pairwise PERMANOVA 16S Stress factor
-
-set.seed(303848)
-pairwise_permanova_bac_results <- lapply(CSS_bac_ps_filt_l, function (x)
-  adonis.pair(dist.mat= phyloseq::distance(otu_table(x), method="bray"),
-              Factor= as.factor(as(phyloseq::sample_data(x),"data.frame")$frass_treatment)))
+              permutations = how(nperm=999))))
 
 
 
