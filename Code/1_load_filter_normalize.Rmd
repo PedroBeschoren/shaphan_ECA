@@ -522,10 +522,14 @@ lapply(unnormalized_BacFun_ps_l, function (x)
           abline(v = min(sample_sums(x)), col="red", lwd=3, lty=2)))
 
 
+```
 
+
+## 5.1 - rarefy bacteria
+```{r}
 #rarefy data
-min(sample_sums(unnormalized_bac_ps)) #minimumum library size
-sort.default(colSums(otu_table(unnormalized_bac_ps))) # sometimes you might want to lose/remove one or more samples that have a very low library size. you would have to balance the number of samples with the minimum number of sequences. in this particular data set, we won't cut any samples as the rarefaction curve looks very good
+min(sample_sums(unnormalized_BacFun_ps_l$Bac)) #minimumum library size
+sort.default(colSums(otu_table(unnormalized_BacFun_ps_l$Bac))) # sometimes you might want to lose/remove one or more samples that have a very low library size. you would have to balance the number of samples with the minimum number of sequences. in this particular data set, we won't cut any samples as the rarefaction curve looks very good
 set.seed(100) # set a random seed so that whenever you re-run this code you draw the same set of OTUs
 rarefied_BacFun_ps_l<-lapply(unnormalized_BacFun_ps_l, function (x)
   rarefy_even_depth(x,
@@ -545,6 +549,32 @@ table(sample_data(x)$amendment,
       sample_data(x)$frass_treatment,
       sample_data(x)$frass_dose ))
 
+
+
+```
+
+## 5.2 - rarefy fungi
+```{r}
+
+min(sample_sums(unnormalized_BacFun_ps_l$Fun)) #minimumum library size
+sort.default(colSums(otu_table(unnormalized_BacFun_ps_l$Fun))) # sometimes you might want to lose/remove one or more samples that have a very low library size. you would have to balance the number of samples with the minimum number of sequences. in this particular data set, we won't cut any samples as the rarefaction curve looks very good
+set.seed(100) # set a random seed so that whenever you re-run this code you draw the same set of OTUs
+rarefied_BacFun_ps_l$Fun<-rarefy_even_depth(unnormalized_BacFun_ps_l$Fun,
+                            sample.size = 3997,
+                            rngseed = FALSE,
+                            replace = TRUE,
+                            trimOTUs = TRUE,
+                            verbose = TRUE)
+
+
+
+#check completeness of sample representation
+lapply(rarefied_BacFun_ps_l, function (x)
+table(sample_data(x)$amendment,
+      sample_data(x)$sample_type,
+      sample_data(x)$frass_source,
+      sample_data(x)$frass_treatment,
+      sample_data(x)$frass_dose ))
 
 
 ```
