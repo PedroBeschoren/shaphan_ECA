@@ -429,13 +429,27 @@ homogeniety_check<-lapply(calculated_diversity_filtred_df_l_l, function(x) # for
 
 ## 5.3 -  test alpha diversity per treatment
 
-as there are only 2 levels per factor, post-hoc tests are not necessary
+
 
 ```{r}
 # anova test
 anova_shannon<-lapply(calculated_diversity_filtred_df_l_l, function(x) # for both bacteria an fungi...
   lapply(x, function (y) 
 summary(aov(Shannon ~ frass_source*frass_treatment*frass_dose, data = y))))
+
+# poshoc option 1
+lapply(calculated_diversity_filtred_df_l_l, function(x) # for both bacteria an fungi...
+  lapply(x, function (y) 
+TukeyHSD(aov(Shannon ~ frass_source*frass_treatment*frass_dose, data = y))))
+
+# poshoc option 2
+tukey_shannon<-lapply(calculated_diversity_filtred_df_l_l, function(x) # for both bacteria an fungi...
+  lapply(x, function (y) {
+tx <- with(y, interaction(frass_source, frass_treatment, frass_dose)) #needed for tukey to test interaction
+aovTukey<-aov(Shannon ~ tx, data = y)#needed for tukey to test interaction
+HSD_output<-HSD.test(aovTukey, "tx", group=TRUE, console=TRUE)#post-hoc
+return(HSD_output)
+}))
 
 
 ```
