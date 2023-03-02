@@ -28,6 +28,7 @@ library(metagMisc)
 library("ggpubr")
 library(purrr)
 library(EcolUtils)
+library(ggrepel)
 
 
 # increases memory limit used by R. 
@@ -44,7 +45,7 @@ load(file = "./Data/CSS_BacFun_ps_l.RData")
 
 
 
-#separate bulk soil from rhizosphere and frass
+## 0.1 - separate bulk soil from rhizosphere and frass
 ```{r}
 #split by sample type
 CSS_bacfun_ps_sampletype_l<-lapply(CSS_BacFun_ps_l, function (x)
@@ -60,7 +61,6 @@ CSS_bacfun_ps_sampletype_l$Fun$rhizosphere<-subset_samples(CSS_bacfun_ps_samplet
 
 
 ```
-
 
 # 1 - Check beta diversity in a NMDS ordination
 
@@ -211,7 +211,7 @@ ggsave(filename = "./Results/NMDS_BacFun_BulkRhizo.pdf" ,
 
 
 
-# 2 - check beta dispersion
+# 2 - Ccheck beta dispersion
 
 beta dispersion is like multivatite homogeniety of variances. just like you can't compare properly very small error bars with very large error bars, you should check if the spread of the data clouds is similar per treatment
 
@@ -268,16 +268,13 @@ lapply(CSS_bacfun_BulkRhizo_ps_l, function(x) beta_disp_plotAndTest(x, "frass_tr
 
 
 
-
-
-
 ```
 
-# 3 - run PERMANOVA and post-hoc test
+# 3 - run PERMANOVA 
 
 We see significant treatment effects, with clear pairwise distinctions, all across the board (bac, fun, rhizo, bulk, interactions...) all experimental factors and their interactions influence microbial community composition in both niches for both kingdoms!
 
-as tehre are only 2 levels per factor, post-hoc tests are not encessary
+as there are only 2 levels per factor, post-hoc tests are not necessary
 
 
 
@@ -301,67 +298,145 @@ permanova_BacFun_results <- lapply(CSS_bacfun_BulkRhizo_ps_l, function (y)
 
 ```{r}
 
-
+#load data, lirbary
 library("microbiome")
+library("car")
+
+load(file = "./Data/rarefied_BacFun_ps_l.RData")
+
 #Calculate richness for root and soil
-calculated_diversity<-microbiome::diversity(rarefied_Bac_ps)
+calculated_diversity_l<-lapply(rarefied_BacFun_ps_l, function (x){
+  df<-estimate_richness(x, measures = c("Observed", "Chao1", "Shannon", "Simpson"))
+  rownames(df)<-gsub("X", "", rownames(df))
+  return(df)
+})
 
 
-n_sequences<-sample_sums(rarefied_Bac_ps)
-calculated_diversity$n_sequences<-n_sequences
 
 
+#### add diversity metrics to mapping file of phyloseq objects. we do this so we can perform anovas, acess metadat, make nicer plots, etc
+# turn diversity into ps metadata
+merg_to_ps_l<-lapply(calculated_diversity_l, function (x) sample_data(x))
 
-#### add diversity metrics to mapping file of phyloseq objects
-# we do this so we can perform anovas, acess metadat, make nicer plots, etc
-merg_to_ps<-sample_data(calculated_diversity) # makes the diversity calculations  sample_data for phyloseq oject...
-calculated_diversity_df<-as(sample_data(merge_phyloseq(rarefied_Bac_ps,merg_to_ps)),"data.frame") # forces sample data of updated phyloseq object into a dataframe
+# merge phyloseq objects, extract them as df
+calculated_diversity_df_l<-mapply(function (x,y)
+  as(sample_data(merge_phyloseq(x,y)),"data.frame"),
+  x =rarefied_BacFun_ps_l,
+  y = merg_to_ps_l,
+  SIMPLIFY = FALSE )
 
 
 #Lets see this on a simple boxplot for Shannon diversity index
-alpha_plot_temp<-ggplot(calculated_diversity_df, aes(x =frass_treatment, y = fisher, fill =frass_source ))+
-  geom_boxplot()+
+alpha_plot_basic<-lapply(calculated_diversity_df_l, function (x)
+  ggplot(x, aes( x =frass_treatment_and_dose, y = Shannon, fill =frass_source ))+
+  geom_violin(aes(alpha = 0.3))+
+  geom_dotplot(binaxis = "y", stackdir = "center", position = "dodge", binwidth = 0.05, aes( x =frass_treatment_and_dose))+
+    geom_text_repel(aes(label = rownames(x)))+
   theme_bw()+
-  facet_wrap(~frass_dose + amendment + sample_type )
-  labs(title = "Fisher diversity indexes")
+  facet_wrap(~ sample_type )+
+  labs(title = paste("Shannon diversity indexes")))
+
+# add kingdom as subtitles
+alpha_plot_basic$Bac<-alpha_plot_basic$Bac + labs(subtitle = "Bacteria")
+alpha_plot_basic$Fun<-alpha_plot_basic$Fun + labs(subtitle = "Fungi")
 
 
-
-ggsave(filename = "./Results/aplha_div.pdf",
-       plot = alpha_plot_temp,
-       width = 30,
-       height = 30,
+#save as a plot
+ggsave(filename = "./Results/alpha_div_3_sample_types.pdf",
+       plot = ggarrange(alpha_plot_basic$Bac,
+                        alpha_plot_basic$Fun),
+       width = 40,
+       height = 15,
        units = "cm")
 
+
+
+```
+
+## 4.1 - remove N and Frass conditions 
+```{r}
+
+# remove conditions that make an anova model complicated
+calculated_diversity_filtred_df_l<-lapply(calculated_diversity_df_l, function (x)
+ dplyr::filter(x, frass_source !="N" & sample_type !="frass"))
+
+
+#Lets see this on a simple boxplot for Shannon diversity index
+alpha_plot<-lapply(calculated_diversity_filtred_df_l, function (x)
+  ggplot(x, aes( x =frass_treatment_and_dose, y = Shannon, fill =frass_source ))+
+  geom_violin(aes(alpha = 0.3))+
+  geom_dotplot(binaxis = "y", stackdir = "center", position = "dodge", binwidth = 0.05, aes( x =frass_treatment_and_dose))+
+  theme_bw()+
+  facet_wrap(~ sample_type )+
+  labs(title = paste("Shannon diversity indexes")))
+
+# add kingdom as subtitles
+alpha_plot$Bac<-alpha_plot$Bac + labs(subtitle = "Bacteria")
+alpha_plot$Fun<-alpha_plot$Fun + labs(subtitle = "Fungi")
+
+#save as a plot
+ggsave(filename = "./Results/alpha_div_BacFun_BulkRhizo.pdf",
+       plot = ggarrange(alpha_plot$Bac,
+                        alpha_plot$Fun),
+       width = 40,
+       height = 15,
+       units = "cm")
 
 ```
 
 
 # 5 - alpha diversity tests
-Shannon diversity has a bit of heterogeniety per treatent:  p= 0.051. Fisher diversity instead has p=0.90 and the pattern in teh plot is the same. stats and post-hoc of shannon and fisher are similar.  let's use fisher diversities here due to lower heterogeniety
 
 
+
+
+## 5.1 separate bulk soil and rhizosphere
+
+we have to separate rhizosphere from bulk soil as their homogeneity of varainces are quite different
 ```{r}
-library("car")
-# chech homogeniety of variances
-leveneTest((fisher) ~ amendment, data = calculated_diversity_df)
 
+# for anova models, it's best to separate sample types as they have different variaances
+calculated_diversity_filtred_df_l_l<-lapply(calculated_diversity_filtred_df_l, function(x)
+  base::split(x, f = x$sample_type))
 
-
-
-# anova test
-anova_fisher<-aov(fisher ~ amendment*frass_source*frass_treatment, data = calculated_diversity_df)
-
-
-
-# get p values
-summary(anova_fisher)
-
-
-
-# post-hoc, both Tukey and Least Significat Difference
-LSD.test(y = anova_fisher, "amendment", group=TRUE, console=TRUE)
+# 3 sample type factors were inherited form the previous df... this will remove them from the list
+calculated_diversity_filtred_df_l_l$Bac$frass<-NULL
+calculated_diversity_filtred_df_l_l$Fun$frass<-NULL
 
 ```
 
+## 5.2 - check homogeniety of varainces
+
+from "Simpson","Observed","Shannon","Chao1", only untransformed Shannon is homogebenous in both sample types of both Bac and Fun ( 3999 reads in fungi )
+
+```{r}
+
+# check homogeniety of variances aross the nested list, in 4 diversity metrics and two transformations
+homogeniety_check<-lapply(calculated_diversity_filtred_df_l_l, function(x) # for both bacteria an fungi...
+  lapply(x, function (y) # in both bulk and rhizo..
+    apply(y[,c("Simpson","Observed","Shannon","Chao1")],2,function (z){ # run the following function for these varaibles
+      untransformed<-leveneTest(z ~ frass_source*frass_treatment*frass_dose, data = y)
+      log10_trans<-leveneTest(log10(z) ~ frass_source*frass_treatment*frass_dose, data = y)
+      sqrt_trans<-leveneTest(sqrt(z) ~ frass_source*frass_treatment*frass_dose, data = y)
+      return(list("untransformed" = untransformed, # returns all transformations in a named list
+                  "log10_trans" = log10_trans,
+                  "sqrt_trans" = sqrt_trans))
+    }
+      ) # closes apply
+    ) #closes second lapply
+  ) # closes first lapply
+```
+
+## 5.3 -  test alpha diversity per treatment
+
+as there are only 2 levels per factor, post-hoc tests are not necessary
+
+```{r}
+# anova test
+anova_shannon<-lapply(calculated_diversity_filtred_df_l_l, function(x) # for both bacteria an fungi...
+  lapply(x, function (y) 
+summary(aov(Shannon ~ frass_source*frass_treatment*frass_dose, data = y))))
+
+
+```
 
