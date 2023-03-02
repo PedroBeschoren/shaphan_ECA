@@ -109,8 +109,8 @@ These comparisons will be based on the data splits and the pairwise_comparison l
 
 
 ```{r}
-# this function will build the significance table for each list, and has to be run once for each pairwise comparison (contro_VS_Meja1.0 and Control_VS_MeJA0.1)
-# I don't know why it is not working for the last contrast of the list above. it could be due to different sample sizes
+# this function will build the significance table for each list, and has to be run once for each pairwise comparison 
+
 
 build_sig_tab<-function (deseq_obj, contrast_cha_vector, unsplit_ps, p_adjust_alpha, min_log_fold){
 
@@ -158,10 +158,22 @@ build_sig_tab<-function (deseq_obj, contrast_cha_vector, unsplit_ps, p_adjust_al
 sigtab_results_bulk<-build_sig_tab(deseq_obj = deseq_3add_l$bulk_soil,
                                   contrast_cha_vector = pairwise_comparison,
                                   unsplit_ps = unnormalized_BacFun_ps_l$Bac,
-                                  p_adjust_alpha = 0.001,
-                                  min_log_fold = 3)
-lapply(sigtab_results_bulk, dim)
-hist(sigtab_results_bulk[[1]]$padj)
+                                  p_adjust_alpha = 0.01,
+                                  min_log_fold = 2)
+
+#check distribution of p values across all pariwise comparsions
+plot(sort(c(sigtab_results_bulk[[1]]$padj, sigtab_results_bulk[[2]]$padj, sigtab_results_bulk[[3]]$padj)))
+hist(sigtab_results_bulk[[1]]$log2FoldChange, breaks = 50)
+
+
+# let's decrease the number of ASVs that pass the filter wtha  more restrictive p value
+sigtab_results_bulk<-build_sig_tab(deseq_obj = deseq_3add_l$bulk_soil,
+                                  contrast_cha_vector = pairwise_comparison,
+                                  unsplit_ps = unnormalized_BacFun_ps_l$Bac,
+                                  p_adjust_alpha = 0.0000000001,
+                                  min_log_fold = 2)
+
+plot(sort(c(sigtab_results_bulk[[1]]$padj, sigtab_results_bulk[[2]]$padj, sigtab_results_bulk[[3]]$padj)))
 hist(sigtab_results_bulk[[1]]$log2FoldChange, breaks = 50)
 
 
@@ -170,6 +182,9 @@ hist(sigtab_results_bulk[[1]]$log2FoldChange, breaks = 50)
 ### 7 - extract differentially abundant ASVS, check orders
 
 here we also look into the orders of the differentially abudannt ASVs
+
+wiht adjusted p value 0.00000000001 we have 291 differentially abundant ASVs - about 1% of the total microbial community for bac$bulk
+wiht adjusted p value 0.0000000001 we have 326 differentially abundant ASVs - and a slightly better bi-cluster heatmap for bac$bulk
 ```{r}
 
 # extract ASV names of the differentially abundant ASVs
@@ -177,12 +192,10 @@ differentialy_abundant_ASVs<-lapply(sigtab_results_bulk, function (x) rownames(x
 unlist(use.names=FALSE)%>% # flatten the rowname (OTU ID) list, ignoring the names of the lists, then...
   unique() # remove duplications of the same OTUs
 
-# 1594 diff abund ASVs in crossing model at p adjust 0.05, log fold difference 2
-# 1154 diff abund ASVs in crossing model at p adjust 0.01, log fold difference 2
-# 943 diff abund ASVs in crossing model at p adjust 0.01, log fold difference 3
-# 847 diff abund ASVs in crossing model at p adjust 0.001, log fold difference 2
-# 713 diff abund ASVs in crossing model at p adjust 0.001, log fold difference 3 # i'm happy with this
+
 length(differentialy_abundant_ASVs)
+
+
 
 # extract Orders from teh sigtabs, showing how often an order is represented
 Order_representation<-lapply(sigtab_results_bulk, function (x) x$Order)%>% # extract the rownames from the list, then....
@@ -223,7 +236,7 @@ heatmp<-pheatmap::pheatmap(log2.norm.countsb, color=viridis(24), annotation_col=
 heatmp
 
 
-ggsave(filename = "./Results/new_heatmap_bulk.pdf",
+ggsave(filename = "./Results/deseq_bulk_bac.pdf",
        plot = heatmp,
        width = 30,
        height = 30,
