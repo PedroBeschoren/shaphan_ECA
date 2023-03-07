@@ -373,7 +373,7 @@ heat_tree_l_l<-mapply(function(ps_obj, ASV_l){
       output<-list("heat_tree_treatment" = heat_tree_treatment,
                    "heat_tree_source" = heat_tree_source,
                    "heat_tree_dose" = heat_tree_dose )
-  
+  return(output)
   
 },
   ps_obj = rarefied_BacFunBulkRhizo_ps_l,
@@ -434,7 +434,88 @@ ggsave(heat_tree_pannel_fun, filename = "./Results/heattree_Fun_pannel.pdf",
 ```
 
 
-# plotinv c
+# we know there are interactions of frass treatment*source, so so let's plot the effects of source in eahc different treatment?
+```{r}
+
+
+#spllit ps per treatment, then build new trees
+raref_BacFun_CU_l_l<-lapply(rarefied_BacFunBulkRhizo_ps_l, function (x)
+  metagMisc::phyloseq_sep_variable(x, variable = "frass_treatment"))
+
+
+
+# effect of source inside ech treatment
+heat_tree_treatment_l<-mapply(function(ps_obj, ASV_l){
+  
+    #make trees per source
+    heat_tree_source_TreatmentU<-
+      phyloseq_to_heat_tree(ps_object = prune_taxa(taxa = ASV_l[[1]], x = ps_obj$U),
+                                           sample_group = "frass_source")
+    
+    heat_tree_source_TreatmentC<-
+      phyloseq_to_heat_tree(ps_object = prune_taxa(taxa = ASV_l[[1]], x = ps_obj$C),
+                                           sample_group = "frass_source")
+  
+  output<-list("heat_tree_source_TreatmentU" = heat_tree_source_TreatmentU,
+               "heat_tree_source_TreatmentC" = heat_tree_source_TreatmentC)
+  return(output)
+  
+},
+  ps_obj = raref_BacFun_CU_l_l,
+  ASV_l = differentialy_abundant_ASVs_l_l,
+  SIMPLIFY = FALSE)
+
+
+# export pannel of source effects on compsoted/uncomposted frass
+ggsave(ggarrange(heat_tree_treatment_l$Bac_Bulk$heat_tree_source_TreatmentU,
+                 heat_tree_treatment_l$Bac_Bulk$heat_tree_source_TreatmentC,
+                 heat_tree_treatment_l$Bac_Rhizo$heat_tree_source_TreatmentU,
+                 heat_tree_treatment_l$Bac_Rhizo$heat_tree_source_TreatmentC,
+                 ncol = 2,
+                 nrow = 2,
+                labels = c("Bac, Bulk, Uncomposted", 
+                           "Bac, Bulk, Composted", 
+                           "Bac, Rhizo, Uncomposted", 
+                           "Bac, Rhizo, Composted")), 
+       filename = "./Results/heattree_Bac_source_on_CompostedUncomposted.pdf",
+       width = 30,
+       height = 30,
+       units = "cm")
+
+
+
+
+# export pannel of source effects on compsoted/uncomposted frass
+ggsave(ggarrange(heat_tree_treatment_l$Fun_Bulk$heat_tree_source_TreatmentU,
+                 heat_tree_treatment_l$Fun_Bulk$heat_tree_source_TreatmentC,
+                 heat_tree_treatment_l$Fun_Rhizo$heat_tree_source_TreatmentU,
+                 heat_tree_treatment_l$Fun_Rhizo$heat_tree_source_TreatmentC,
+                 ncol = 2,
+                 nrow = 2,
+                labels = c("Fun, Bulk, Uncomposted", 
+                           "Fun, Bulk, Composted", 
+                           "Fun, Rhizo, Uncomposted", 
+                           "Fun, Rhizo, Composted")), 
+       filename = "./Results/heattree_Fun_source_on_CompostedUncomposted.pdf",
+       width = 30,
+       height = 30,
+       units = "cm")
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+ignoge this chunk... it will generate a very in-depth series of hierarchichal trees to explore individual effects. it's too much details that we don't need!
 ```{r}
 
 #laod rarefied data and remove N and rass samples
