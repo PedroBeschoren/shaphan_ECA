@@ -291,6 +291,22 @@ permanova_BacFun_results <- lapply(CSS_bacfun_BulkRhizo_ps_l, function (y)
 
 ```
 
+# 3.1 - run PERMANOVA post-hoc
+
+```{r}
+
+# for bacteria
+lapply(CSS_bacfun_BulkRhizo_ps_l$Bac, function (x)
+  adonis.pair(dist.mat= phyloseq::distance(otu_table(x), method="bray"),
+              Factor= as.factor(as(phyloseq::sample_data(x),"data.frame")$frass_treatment_dose_source)))
+
+# for bacteria
+lapply(CSS_bacfun_BulkRhizo_ps_l$Fun, function (x)
+  adonis.pair(dist.mat= phyloseq::distance(otu_table(x), method="bray"),
+              Factor= as.factor(as(phyloseq::sample_data(x),"data.frame")$frass_treatment)))
+```
+
+
 
 # 4 - Alpha diversity calculations & plot
 
