@@ -1,0 +1,630 @@
+---
+title: "5_random_fortest"
+author: "Pedro"
+date: "8/9/2022"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# 0 - Load libraries & data
+
+```{r}
+
+#load necessary libraries
+library(phyloseq)
+library(ggplot2)
+library(tibble)
+library(dplyr)
+library(Boruta)
+library(caret)
+library(randomForest)
+library(metacoder)
+
+
+
+# increases memory limit used by R
+memory.limit(size = 350000)
+
+
+
+#load the phyloseq objects containing all microbiome data
+load(file = "./Data/CSS_BacFun_ps_l.RData")
+
+
+```
+
+# 1 - define a few functions of interest
+```{r}
+
+
+
+
+
+single_physeq_to_borutaInput<-function (physeq_object, variable_to_be_classified){
+  # boruta expects a transposed OTU table with variable_to_be_classified as a added variable
+  # the output is a list of df ready to be used as input to boruta  
+  #transpose phtseq otu table  
+  otu_cells_wide_list <- #transpose the feature table...
+    base::as.data.frame(t(otu_table(physeq_object)))%>%
+      rownames_to_column(var = "sample")
+  
+  # extract sample data
+  metadata_list <-
+    as(sample_data(physeq_object),"data.frame")%>%
+      rownames_to_column(var = "sample")
+  
+  #add the variable classification you want to predict with the random forest
+  boruta_dataset<-
+    base::merge(dplyr::select(metadata_list,sample, variable_to_be_classified),
+                otu_cells_wide_list,
+                by = "sample",
+                all.y = TRUE)
+  
+  #make sure your variable to be classified is a numeic, or boruta won't run
+  
+    boruta_dataset[,2]<-as.numeric(boruta_dataset[,2]) # saves the second column, your variable_to_be_classified, as numeric
+   
+    output<-boruta_dataset
+    
+  gc()
+  return(output)
+}
+
+
+
+
+
+
+
+# write a function to split training and test data from a phyloseq object
+train_and_test_spliter<-function(ps_object, variable_to_be_classified){
+  
+  # this function will separate train and test sets based on a phyloseq object and the variable to be predicted. it requires the function single_physeq_to_borutaInput()
+  # ps_object = a phyloseq object
+  # variable_to_be_classified =  a (quoted) metadata column that you want to predict
+  # the output is a list of two objects: the first is the training set, the second is the test set
+  
+  # wrangle phyloseq data
+  ps_data<-single_physeq_to_borutaInput(physeq_object = ps_object,
+                                        variable_to_be_classified = variable_to_be_classified)
+  
+  # define training and test set. this can be ofptimized for repeated k-fold cross validation
+  trainIndex<- createDataPartition(ps_data[,2], 
+                                   p = .70, 
+                                   list = FALSE, 
+                                   times = 1)
+  # set train and test sets
+  data_Train <- ps_data [ trainIndex,]
+  data_Test  <- ps_data [-trainIndex,]
+  
+  output<-list(data_Train,data_Test)
+  names(output)<-c("data_Train","data_Test")
+  
+  return(output)
+  
+}
+
+
+
+
+
+# define a function to fix borta objects and put them into formula format
+fixed_boruta_formula<-function(boruta_object){
+  # this fucntion takes a boruta ofbect, fixes the inconclusive tas into importnat o unimportnat, and then generates a formula
+  # the input is a boruta object
+  # the output is a boruta formula to be fed to caret::train
+  # NOTE: boruta objects with zero imporntat features may crash!
+  
+  fixed_boruta<-TentativeRoughFix(boruta_object)
+  boruta_imp_ASV<-getSelectedAttributes(fixed_boruta)
+  print("number of importnat ASVs. Warning: if zero, formula will crash!")
+  print(length(boruta_imp_ASV)%>%unlist()%>%sort())
+  formula_boruta<-getConfirmedFormula(fixed_boruta)
+  
+  return(formula_boruta)
+}
+
+
+# put fixing, spliting, training and testing all in a single function
+fix_split_train_test<-function (boruta_output_l, ps_object_l, variable_to_be_classified){
+  # this fucntion will fix tentative features in a list of boruta objects
+  # then it will split a list of phyloseq objects into training and test sets
+  # then it will train the list of models
+  # then it will test the lsit of models
+  # then it returns a list of confusion matrixes (one for each model)
+    # boruta_output_l = a list of boruta objects
+    # ps_object_l = a list of phyloseq objects
+    # variable_to_be_classified = the metadata varaible you are trying to predict (must be quoted, like "Stress")
+  
+  # fix boruta in a formula to be evaluated with caret
+  boruta_formula_bac_l<-lapply(boruta_output_l, function(x) fixed_boruta_formula(x))
+  
+  # split train adn test dataset
+  set.seed(3456)
+  train_test_l<-lapply(ps_object_l, function (x)
+    train_and_test_spliter(ps_object = x, 
+                           variable_to_be_classified = variable_to_be_classified))
+  
+  
+  
+  # train model
+  set.seed(3456)
+  boruta_feature_rf_repeatedcv<-mapply(function (x,z) {
+    
+    train.control <- caret::trainControl(method = "repeatedcv", # set trainig/data split controls for the train function
+                                         number = 5,
+                                         repeats = 100,
+                                         allowParallel = TRUE)
+    
+    model_borutized <- caret::train(form = z, # bruta formula
+                                    data = x[[1]], # training data ; first element of train_and_test_spliter()
+                                    method = "rf", #execute training based on RF
+                                    trControl = train.control, # defined in trainControl() above
+                                    ntree=10000)
+    
+    
+    
+    return(model_borutized)
+  },
+  x = train_test_l,
+  z = boruta_formula_bac_l,
+  SIMPLIFY = FALSE)
+  
+  
+  
+  #test model
+  set.seed(3456)
+  confusion_matrix_output<-mapply(function(x,y){
+    prediction<-stats::predict(object = x, newdata = y[[2]]) 
+    confusion_output<-confusionMatrix(data = prediction, reference = y[[2]][,2])
+    return(confusion_output)
+  },
+  x = boruta_feature_rf_repeatedcv,
+  y = train_test_l,
+  SIMPLIFY = FALSE)
+  
+  
+  
+  return(confusion_matrix_output)
+  
+  
+}
+
+
+
+
+
+
+# put fixing, spliting, training and testing all in a single function. this is for a regression rf model
+fix_split_train_test_regression<-function (boruta_output_l, ps_object_l, variable_to_be_classified){
+  # this fucntion will fix tentative features in a list of boruta objects
+  # then it will split a list of phyloseq objects into training and test sets
+  # then it will train the list of models
+  # then it will test the lsit of models
+  # then it returns a list of confusion matrixes (one for each model)
+    # boruta_output_l = a list of boruta objects
+    # ps_object_l = a list of phyloseq objects
+    # variable_to_be_classified = the metadata varaible you are trying to predict (must be quoted, like "Stress")
+  
+  # fix boruta in a formula to be evaluated with caret
+  boruta_formula_bac_l<-lapply(boruta_output_l, function(x) fixed_boruta_formula(x))
+  
+  # split train adn test dataset
+  set.seed(3456)
+  train_test_l<-lapply(ps_object_l, function (x)
+    train_and_test_spliter(ps_object = x, 
+                           variable_to_be_classified = variable_to_be_classified))
+  
+  
+  
+  # train model
+  set.seed(3456)
+  boruta_feature_rf_repeatedcv<-mapply(function (x,z) {
+    
+    train.control <- caret::trainControl(method = "repeatedcv", # set trainig/data split controls for the train function
+                                         number = 5,
+                                         repeats = 100,
+                                         allowParallel = TRUE)
+    
+    model_borutized <- caret::train(form = z, # bruta formula
+                                    data = x[[1]], # training data ; first element of train_and_test_spliter()
+                                    method = "rf", #execute training based on RF
+                                    trControl = train.control, # defined in trainControl() above
+                                    ntree=10000)
+    
+    
+    
+    return(model_borutized)
+  },
+  x = train_test_l,
+  z = boruta_formula_bac_l,
+  SIMPLIFY = FALSE)
+  
+  
+  
+  #test model
+  set.seed(3456)
+  confusion_matrix_output<-mapply(function(x,y){
+    prediction<-stats::predict(object = x, newdata = y[[2]]) 
+    confusion_output<-confusionMatrix(data = prediction, reference = y[[2]][,2])
+    return(confusion_output)
+  },
+  x = boruta_feature_rf_repeatedcv,
+  y = train_test_l,
+  SIMPLIFY = FALSE)
+  
+  
+  
+  return(confusion_matrix_output)
+  
+  
+}
+
+
+
+
+
+
+
+
+
+
+
+# define function to extract some key model metrics after CV precision testing
+extract_confusionmatrix_metrics<-function(CV_output_l, Imp_ASV_stats_l){
+  # this fucntion will extract key RF model metris from lists of RF models
+  # CV_output_l = list of model testing objects from fix_split_train_test() custom function
+  # Imp_ASV_stats_l = list of important ASV stats from a fixed boruta object
+  # the output is a df with metrics for each model
+
+  # accurayc, kappa, AccuracyPValue  
+  
+  cv_metrics<-map(CV_output_l,3)
+  
+  accuracy<-unlist(map(cv_metrics,1)) #accuracy
+  
+  kappa<-unlist(map(cv_metrics,2)) #kappa
+  AccuracyLower<-unlist(map(cv_metrics,3)) #AccuracyLower  
+  AccuracyUpper<-unlist(map(cv_metrics,4)) #AccuracyUpper  
+  AccuracyPValue<-unlist(map(cv_metrics,6)) #AccuracyPValue 
+  
+  
+  
+  model_metrics<-as.data.frame(accuracy)
+  model_metrics$kappa<-kappa     
+  model_metrics$AccuracyLower<-AccuracyLower  
+  model_metrics$AccuracyUpper<-AccuracyUpper  
+  model_metrics$AccuracyPValue<-AccuracyPValue
+  
+  # n important stress predictor ASVs  
+  model_metrics$n_imp_ASVs<-lapply(Imp_ASV_stats_l, function (x) length(x[,1]))%>%unlist
+  
+  # mean average imporance of ASVs in model
+  model_metrics$mean_ASV_imp<-lapply(Imp_ASV_stats_l, function (x) mean(x[,2]))%>%unlist
+  
+  # mean median imporance of ASVs in model
+  model_metrics$median_ASV_imp<-lapply(Imp_ASV_stats_l, function (x) mean(x[,3]))%>%unlist
+  
+  # sd imporance of ASVs in model
+  model_metrics$sd_ASV_imp<-lapply(Imp_ASV_stats_l, function (x) sd(x[,2]))%>%unlist
+  
+  # men normHits of ASVs in model
+  model_metrics$mean_normHits_ASV_imp<-lapply(Imp_ASV_stats_l, function (x) mean(x[,6]))%>%unlist
+  
+  # sd normHits of ASVs in model
+  model_metrics$sd_normHits_ASV_imp<-lapply(Imp_ASV_stats_l, function (x) sd(x[,6]))%>%unlist
+  
+  return(model_metrics)
+}
+
+
+```
+
+
+# remove frass-only samples, adjsut column names, fix list
+```{r}
+
+#change name of the emtdata column "sample" to avoid crashing with custom function
+CSS_BacFun_ps_l<-lapply(CSS_BacFun_ps_l, function(x){
+colnames(x@sam_data)[8]<-"sample_type"
+return(x)
+})
+
+# split bacterial dataset
+CSS_BacFun_BulkRhizo_ps_l_l<-lapply( CSS_BacFun_ps_l, function (x) metagMisc::phyloseq_sep_variable(x, variable = "sample_type"))
+
+# remove frass sample type from list, then flatten it
+CSS_BacFunBulkRhizo_ps_l<-list("Bac_Bulk" = CSS_BacFun_BulkRhizo_ps_l_l$Bac$bulk_soil,
+                                        "Bac_Rhizo" = CSS_BacFun_BulkRhizo_ps_l_l$Bac$rhizosphere,
+                                        "Fun_Bulk" = CSS_BacFun_BulkRhizo_ps_l_l$Fun$bulk_soil,
+                                        "Fun_Rhizo" = CSS_BacFun_BulkRhizo_ps_l_l$Fun$rhizosphere)
+
+```
+
+# 2 - prepare phyloseq object to be an input in Boruta
+
+check this tutorial for regression on caret: http://zevross.com/blog/2017/09/19/predictive-modeling-and-machine-learning-in-r-with-the-caret-package/
+https://towardsdatascience.com/a-guide-to-using-caret-in-r-71dec0bda208
+https://rpubs.com/cliex159/881990
+
+start with fun_rhizo (including samples N), then try list
+
+
+
+```{r boruta}
+
+
+# define imporatan features with boruta
+Boruta_fun_rhizo<-
+  Boruta(shoot_biomass~.,   # classification you are trying to predict
+         data = single_physeq_to_borutaInput(physeq_object = CSS_BacFunBulkRhizo_ps_l$Fun_Rhizo,
+                                             variable_to_be_classified = "shoot_biomass")[,-1], # removes first column, "sample" as a predictor variable
+         doTrace=2, 
+         maxRuns = 100,  #increase the maximum number of runs to decrease the number of tenttively important OTUs.
+         ntree = 5000)
+
+# fix boruta intoa  formula
+boruta_biomass_formula<-fixed_boruta_formula(Boruta_fun_rhizo)
+
+#split train and test sets
+train_test_df<-train_and_test_spliter(ps_object = CSS_BacFunBulkRhizo_ps_l$Fun_Rhizo,
+                       variable_to_be_classified ="shoot_biomass" )
+
+# define random seed
+set.seed(4551)
+
+#define training model
+train.control <- trainControl(method = "repeatedcv", # set trainig/data split controls for the train function
+                              number = 5, 
+                              repeats = 100)
+train.control_LOOCV<-trainControl(method="LOOCV")
+# train the model
+model_borutized_biomass <- caret::train(boruta_biomass_formula, 
+                                         data = train_test_df$data_Train, 
+                                         method = "rf", 
+                                         trControl = train.control_LOOCV, 
+                                         ntree=200,
+                                         tuneLength = 7)
+
+# check different mtry
+arrange(model_borutized_biomass$results, RMSE) %>% head
+
+# check the predictions of the model on the test set
+caret::predict.train(object = model_borutized_biomass,
+              newdata = train_test_df$data_Test)
+
+#values of biomass on test set
+train_test_df$data_Test$shoot_biomass
+
+#quick plot of predicted VS test set
+ggplot(
+  data = train_test_df$data_Test,
+  aes(x = train_test_df$data_Test$shoot_biomass, y = caret::predict.train(object = model_borutized_biomass,
+              newdata = train_test_df$data_Test))
+) + geom_point()
+
+
+#### calculate RMSE for my model
+
+# predict biomas values in test set
+prediction<-caret::predict.train(object = model_borutized_biomass, newdata = train_test_df$data_Test)
+
+# define the eror between test and training set
+error<- prediction - train_test_df$data_Test$shoot_biomass
+
+#calculate Root Mean Square Error
+sqrt(mean(error ^ 2))
+
+# plot error (residuals
+plot(train_test_df$data_Test$shoot_biomass, error)
+
+```
+
+
+
+
+
+
+# run tests above on lists... hope it won't crash!
+```{r}
+
+t0<-Sys.time()
+set.seed(101)
+Boruta_Fun_Biomass<-lapply(CSS_BacFunBulkRhizo_ps_l[3:4], function (x) #parLapply wil do a parallel lapply on the defined cluster
+  Boruta(shoot_biomass~.,   # classification you are trying to predict
+         data = single_physeq_to_borutaInput(physeq_object = x,
+                                             variable_to_be_classified = "shoot_biomass")[,-1], # removes first column, "sample" as a predictor variable
+         doTrace=2, 
+         maxRuns = 300,  #increase the maximum number of runs to decrease the number of tenttively important OTUs.
+         ntree = 3000))
+
+#save
+save(Boruta_Fun_Biomass, file = "./Data/Boruta_Fun_Biomass.RData")
+
+# clear space
+rm(Boruta_Fun_Biomass)
+gc()
+
+
+#run bac
+Boruta_Bac_Biomass<-lapply(CSS_BacFunBulkRhizo_ps_l[1:2], function (x) #parLapply wil do a parallel lapply on the defined cluster
+  Boruta(shoot_biomass~.,   # classification you are trying to predict
+         data = single_physeq_to_borutaInput(physeq_object = x,
+                                             variable_to_be_classified = "shoot_biomass")[,-1], # removes first column, "sample" as a predictor variable
+         doTrace=2, 
+         maxRuns = 300,  #increase the maximum number of runs to decrease the number of tenttively important OTUs.
+         ntree = 3000))
+
+#save
+save(Boruta_Bac_Biomass, file = "./Data/Boruta_Bac_Biomass.RData")
+t1<-Sys.time()
+
+
+```
+
+
+
+```{r}
+
+
+# put output into a single list with four elements
+Boruta_Bac_Biomass
+Boruta_Fun_Biomass
+
+Boruta_BacFun_Biomass<-list("Bac_Bulk" = Boruta_Bac_Biomass$Bac_Bulk,
+                            "Bac_Rhizo" = Boruta_Bac_Biomass$Bac_Rhizo,
+                            "Fun_Bulk" = Boruta_Fun_Biomass$Fun_Bulk,
+                            "Fun_Rhizo" = Boruta_Fun_Biomass$Fun_Rhizo)
+
+```
+
+
+
+```{r}
+# fix boruta intoa  formula
+boruta_biomass_formula_l<-lapply(Boruta_BacFun_Biomass, fixed_boruta_formula)
+
+#split train and test sets
+train_test_df_l<-lapply(CSS_BacFunBulkRhizo_ps_l, function (x)
+  train_and_test_spliter(ps_object = x, variable_to_be_classified ="shoot_biomass" ))
+
+# define random seed
+set.seed(4551)
+
+#define training model
+train.control <- trainControl(method = "repeatedcv", # set trainig/data split controls for the train function
+                              number = 5, 
+                              repeats = 100)
+
+# train the model... 33 min for fun_rhizo
+t0<-Sys.time()
+model_borutized_biomass_l <-mapply(function (x,y)
+                            caret::train(form = x, 
+                                         data = y$data_Train, 
+                                         method = "rf", 
+                                         trControl = train.control, 
+                                         ntree= 1000,
+                                         tuneLength = 7),
+                            x = boruta_biomass_formula_l,
+                            y = train_test_df_l,
+                            SIMPLIFY = FALSE)
+t1<-Sys.time()
+
+t0-t1 # takes 4.5h for 1 caret::train run on my system; boruta took ~4h at 3000 trees
+
+
+save(model_borutized_biomass_l, file = "./Data/model_borutized_biomass_l.RData" )
+
+# check different mtry
+lapply(model_borutized_biomass_l, function(x)
+  arrange(x$results, RMSE) %>% head)
+
+# check the predictions of the model on the test set
+caret::predict.train(object = model_borutized_biomass,
+              newdata = train_test_df_l$Fun_Rhizo$data_Train)
+
+#values of biomass on test set
+train_test_df_l$Fun_Rhizo$data_Test$shoot_biomass
+
+#quick plot of predicted VS test set
+
+
+ggplot(
+  data = train_test_df_l$Bac_Bulk$data_Test,
+  aes(x = train_test_df_l$Bac_Bulk$data_Test$shoot_biomass,
+      y = caret::predict.train(object = model_borutized_biomass_l$Bac_Bulk,
+              newdata = train_test_df_l$Bac_Bulk$data_Test))
+) + geom_point()
+
+
+ggplot(
+  data = train_test_df_l$Bac_Rhizo$data_Test,
+  aes(x = train_test_df_l$Bac_Rhizo$data_Test$shoot_biomass,
+      y = caret::predict.train(object = model_borutized_biomass_l$Bac_Rhizo,
+              newdata = train_test_df_l$Bac_Rhizo$data_Test))
+) + geom_point()
+
+
+
+ggplot(
+  data = train_test_df_l$Fun_Bulk$data_Test,
+  aes(x = train_test_df_l$Fun_Bulk$data_Test$shoot_biomass,
+      y = caret::predict.train(object = model_borutized_biomass_l$Fun_Bulk,
+              newdata = train_test_df_l$Fun_Bulk$data_Test))
+) + geom_point()
+
+
+
+ggplot(
+  data = train_test_df_l$Fun_Rhizo$data_Test,
+  aes(x = train_test_df_l$Fun_Rhizo$data_Test$shoot_biomass,
+      y = caret::predict.train(object = model_borutized_biomass_l$Fun_Rhizo,
+              newdata = train_test_df_l$Fun_Rhizo$data_Test))
+) + geom_point()
+
+
+
+
+
+
+
+
+
+#### calculate RMSE for my model
+
+# predict biomas values in test set
+prediction<-caret::predict.train(object = model_borutized_biomass_l$Bac_Bulk, newdata = train_test_df_l$Bac_Bulk$data_Test)
+
+# define the eror between test and training set
+error<- prediction - train_test_df_l$Bac_Bulk$data_Test$shoot_biomass
+
+#calculate Root Mean Square Error
+sqrt(mean(error ^ 2))
+
+# plot error (residuals
+plot(train_test_df_l$Bac_Bulk$data_Test$shoot_biomass, error)
+
+
+
+
+prediction<-caret::predict.train(object = model_borutized_biomass_l$Bac_Rhizo, newdata = train_test_df_l$Bac_Rhizo$data_Test)
+
+# define the eror between test and training set
+error<- prediction - train_test_df_l$Bac_Rhizo$data_Test$shoot_biomass
+
+#calculate Root Mean Square Error
+sqrt(mean(error ^ 2))
+
+# plot error (residuals
+plot(train_test_df_l$Bac_Rhizo$data_Test$shoot_biomass, error)
+
+
+
+
+prediction<-caret::predict.train(object = model_borutized_biomass_l$Fun_Bulk, newdata = train_test_df_l$Fun_Bulk$data_Test)
+
+# define the eror between test and training set
+error<- prediction - train_test_df_l$Fun_Bulk$data_Test$shoot_biomass
+
+#calculate Root Mean Square Error
+sqrt(mean(error ^ 2))
+
+# plot error (residuals
+plot(train_test_df_l$Fun_Bulk$data_Test$shoot_biomass, error)
+
+
+
+
+prediction<-caret::predict.train(object = model_borutized_biomass_l$Fun_Rhizo, newdata = train_test_df_l$Fun_Rhizo$data_Test)
+
+# define the eror between test and training set
+error<- prediction - train_test_df_l$Fun_Rhizo$data_Test$shoot_biomass
+
+#calculate Root Mean Square Error
+sqrt(mean(error ^ 2))
+
+# plot error (residuals
+plot(train_test_df_l$Fun_Rhizo$data_Test$shoot_biomass, error)
+```
+
