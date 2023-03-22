@@ -127,7 +127,7 @@ fixed_boruta_formula<-function(boruta_object){
 
 
 # put fixing, spliting, training and testing all in a single function
-fix_split_train_test<-function (boruta_output_l, ps_object_l, variable_to_be_classified){
+fix_split_train<-function (boruta_output_l, ps_object_l, variable_to_be_classified){
   # this fucntion will fix tentative features in a list of boruta objects
   # then it will split a list of phyloseq objects into training and test sets
   # then it will train the list of models
@@ -141,7 +141,6 @@ fix_split_train_test<-function (boruta_output_l, ps_object_l, variable_to_be_cla
   boruta_formula_bac_l<-lapply(boruta_output_l, function(x) fixed_boruta_formula(x))
   
   # split train adn test dataset
-  set.seed(3456)
   train_test_l<-lapply(ps_object_l, function (x)
     train_and_test_spliter(ps_object = x, 
                            variable_to_be_classified = variable_to_be_classified))
@@ -149,19 +148,19 @@ fix_split_train_test<-function (boruta_output_l, ps_object_l, variable_to_be_cla
   
   
   # train model
-  set.seed(3456)
   boruta_feature_rf_repeatedcv<-mapply(function (x,z) {
     
     train.control <- caret::trainControl(method = "repeatedcv", # set trainig/data split controls for the train function
                                          number = 5,
-                                         repeats = 100,
+                                         repeats = 10,
                                          allowParallel = TRUE)
     
     model_borutized <- caret::train(form = z, # bruta formula
                                     data = x[[1]], # training data ; first element of train_and_test_spliter()
                                     method = "rf", #execute training based on RF
                                     trControl = train.control, # defined in trainControl() above
-                                    ntree=10000)
+                                    ntree=600,
+                                    tuneLength = 5  )
     
     
     
@@ -172,94 +171,17 @@ fix_split_train_test<-function (boruta_output_l, ps_object_l, variable_to_be_cla
   SIMPLIFY = FALSE)
   
   
-  
-  #test model
-  set.seed(3456)
-  confusion_matrix_output<-mapply(function(x,y){
-    prediction<-stats::predict(object = x, newdata = y[[2]]) 
-    confusion_output<-confusionMatrix(data = prediction, reference = y[[2]][,2])
-    return(confusion_output)
-  },
-  x = boruta_feature_rf_repeatedcv,
-  y = train_test_l,
-  SIMPLIFY = FALSE)
+  output<-list("train_test_l" = train_test_l,
+               "boruta_feature_rf_repeatedcv" = boruta_feature_rf_repeatedcv)
   
   
-  
-  return(confusion_matrix_output)
+  return(output)
   
   
 }
 
 
 
-
-
-
-# put fixing, spliting, training and testing all in a single function. this is for a regression rf model
-fix_split_train_test_regression<-function (boruta_output_l, ps_object_l, variable_to_be_classified){
-  # this fucntion will fix tentative features in a list of boruta objects
-  # then it will split a list of phyloseq objects into training and test sets
-  # then it will train the list of models
-  # then it will test the lsit of models
-  # then it returns a list of confusion matrixes (one for each model)
-    # boruta_output_l = a list of boruta objects
-    # ps_object_l = a list of phyloseq objects
-    # variable_to_be_classified = the metadata varaible you are trying to predict (must be quoted, like "Stress")
-  
-  # fix boruta in a formula to be evaluated with caret
-  boruta_formula_bac_l<-lapply(boruta_output_l, function(x) fixed_boruta_formula(x))
-  
-  # split train adn test dataset
-  set.seed(3456)
-  train_test_l<-lapply(ps_object_l, function (x)
-    train_and_test_spliter(ps_object = x, 
-                           variable_to_be_classified = variable_to_be_classified))
-  
-  
-  
-  # train model
-  set.seed(3456)
-  boruta_feature_rf_repeatedcv<-mapply(function (x,z) {
-    
-    train.control <- caret::trainControl(method = "repeatedcv", # set trainig/data split controls for the train function
-                                         number = 5,
-                                         repeats = 100,
-                                         allowParallel = TRUE)
-    
-    model_borutized <- caret::train(form = z, # bruta formula
-                                    data = x[[1]], # training data ; first element of train_and_test_spliter()
-                                    method = "rf", #execute training based on RF
-                                    trControl = train.control, # defined in trainControl() above
-                                    ntree=10000)
-    
-    
-    
-    return(model_borutized)
-  },
-  x = train_test_l,
-  z = boruta_formula_bac_l,
-  SIMPLIFY = FALSE)
-  
-  
-  
-  #test model
-  set.seed(3456)
-  confusion_matrix_output<-mapply(function(x,y){
-    prediction<-stats::predict(object = x, newdata = y[[2]]) 
-    confusion_output<-confusionMatrix(data = prediction, reference = y[[2]][,2])
-    return(confusion_output)
-  },
-  x = boruta_feature_rf_repeatedcv,
-  y = train_test_l,
-  SIMPLIFY = FALSE)
-  
-  
-  
-  return(confusion_matrix_output)
-  
-  
-}
 
 
 
@@ -322,7 +244,7 @@ extract_confusionmatrix_metrics<-function(CV_output_l, Imp_ASV_stats_l){
 ```
 
 
-# remove frass-only samples, adjsut column names, fix list
+# 3 - remove frass-only samples, adjsut column names, fix list
 ```{r}
 
 #change name of the emtdata column "sample" to avoid crashing with custom function
@@ -352,81 +274,13 @@ start with fun_rhizo (including samples N), then try list
 
 
 
-```{r boruta}
-
-
-# define imporatan features with boruta
-Boruta_fun_rhizo<-
-  Boruta(shoot_biomass~.,   # classification you are trying to predict
-         data = single_physeq_to_borutaInput(physeq_object = CSS_BacFunBulkRhizo_ps_l$Fun_Rhizo,
-                                             variable_to_be_classified = "shoot_biomass")[,-1], # removes first column, "sample" as a predictor variable
-         doTrace=2, 
-         maxRuns = 100,  #increase the maximum number of runs to decrease the number of tenttively important OTUs.
-         ntree = 5000)
-
-# fix boruta intoa  formula
-boruta_biomass_formula<-fixed_boruta_formula(Boruta_fun_rhizo)
-
-#split train and test sets
-train_test_df<-train_and_test_spliter(ps_object = CSS_BacFunBulkRhizo_ps_l$Fun_Rhizo,
-                       variable_to_be_classified ="shoot_biomass" )
-
-# define random seed
-set.seed(4551)
-
-#define training model
-train.control <- trainControl(method = "repeatedcv", # set trainig/data split controls for the train function
-                              number = 5, 
-                              repeats = 100)
-train.control_LOOCV<-trainControl(method="LOOCV")
-# train the model
-model_borutized_biomass <- caret::train(boruta_biomass_formula, 
-                                         data = train_test_df$data_Train, 
-                                         method = "rf", 
-                                         trControl = train.control_LOOCV, 
-                                         ntree=200,
-                                         tuneLength = 7)
-
-# check different mtry
-arrange(model_borutized_biomass$results, RMSE) %>% head
-
-# check the predictions of the model on the test set
-caret::predict.train(object = model_borutized_biomass,
-              newdata = train_test_df$data_Test)
-
-#values of biomass on test set
-train_test_df$data_Test$shoot_biomass
-
-#quick plot of predicted VS test set
-ggplot(
-  data = train_test_df$data_Test,
-  aes(x = train_test_df$data_Test$shoot_biomass, y = caret::predict.train(object = model_borutized_biomass,
-              newdata = train_test_df$data_Test))
-) + geom_point()
-
-
-#### calculate RMSE for my model
-
-# predict biomas values in test set
-prediction<-caret::predict.train(object = model_borutized_biomass, newdata = train_test_df$data_Test)
-
-# define the eror between test and training set
-error<- prediction - train_test_df$data_Test$shoot_biomass
-
-#calculate Root Mean Square Error
-sqrt(mean(error ^ 2))
-
-# plot error (residuals
-plot(train_test_df$data_Test$shoot_biomass, error)
-
-```
-
-
-
-
 
 
 # run tests above on lists... hope it won't crash!
+
+i've silenced the saving function so it does not overwrite the working .RData object with boruta models
+
+running this chunk on my computer (4 cores, 16GB) takes ~ 30 min for fungi dataset and ~ 7h for the abcterial dataset
 ```{r}
 
 t0<-Sys.time()
@@ -440,7 +294,8 @@ Boruta_Fun_Biomass<-lapply(CSS_BacFunBulkRhizo_ps_l[3:4], function (x) #parLappl
          ntree = 3000))
 
 #save
-save(Boruta_Fun_Biomass, file = "./Data/Boruta_Fun_Biomass.RData")
+#save(Boruta_Fun_Biomass, file = "./Data/Boruta_Fun_Biomass.RData")
+
 
 # clear space
 rm(Boruta_Fun_Biomass)
@@ -457,7 +312,7 @@ Boruta_Bac_Biomass<-lapply(CSS_BacFunBulkRhizo_ps_l[1:2], function (x) #parLappl
          ntree = 3000))
 
 #save
-save(Boruta_Bac_Biomass, file = "./Data/Boruta_Bac_Biomass.RData")
+#save(Boruta_Bac_Biomass, file = "./Data/Boruta_Bac_Biomass.RData")
 t1<-Sys.time()
 
 
@@ -466,7 +321,9 @@ t1<-Sys.time()
 
 
 ```{r}
-
+# load boruta objects
+load(file = "./Data/Boruta_Bac_Biomass.RData")
+load(file = "./Data/Boruta_Fun_Biomass.RData")
 
 # put output into a single list with four elements
 Boruta_Bac_Biomass
@@ -480,8 +337,86 @@ Boruta_BacFun_Biomass<-list("Bac_Bulk" = Boruta_Bac_Biomass$Bac_Bulk,
 ```
 
 
+#fix split and train in a single replicated function
+```{r}
+set.seed(23456)
+replicated_model<-replicate(10, fix_split_train(boruta_output_l = Boruta_BacFun_Biomass,
+                                                ps_object_l = CSS_BacFunBulkRhizo_ps_l,
+                                                variable_to_be_classified ="shoot_biomass" ))
+
+save(replicated_model, file = "./Data/replicated_model.RData")
+load( file = "./Data/replicated_model.RData")
+
+```
+
+
+
+
+# test replicated models
+```{r}
+
+
+names(replicated_model) #1-4 as data slice, 1-10 as replicate
+
+
+replicated_model[1,1][1]$Bac_Bulk$times[1]$everything[3] #model
+replicated_model[2,1][1]$Bac_Rhizo$times[1]$everything[3] #model
+replicated_model[3,1][1]$Fun_Bulk$times[1]$everything[3] #model
+replicated_model[4,1][1]$Fun_Rhizo$times[1]$everything[3] #model
+
+replicated_model[1,7][1]$Bac_Bulk$times[1]$everything[3] #model
+replicated_model[2,7][1]$Bac_Rhizo$times[1]$everything[3] #model
+replicated_model[3,7][1]$Fun_Bulk$times[1]$everything[3] #model
+replicated_model[4,7][1]$Fun_Rhizo$times[1]$everything[3] #model
+
+replicated_model[1,1]$Bac_Bulk$times #model
+replicated_model[2,7][1]$Bac_Rhizo #model
+replicated_model[3,7][1]$Fun_Bulk #model
+replicated_model[4,7][1]$Fun_Bulk #model
+
+lapply(replicated_model, function(x)
+  )
+
+
+# check different mtry
+lapply(replicated_model[1], function(x)
+  arrange(x$results, RMSE) %>% head)
+
+
+
+
+#quick plot of predicted VS test set
+
+
+ggplot(
+  data = train_test_df_l$Bac_Bulk$data_Test,
+  aes(x = train_test_df_l$Bac_Bulk$data_Test$shoot_biomass,
+      y = caret::predict.train(object = model_borutized_biomass_l$Bac_Bulk,
+              newdata = train_test_df_l$Bac_Bulk$data_Test))
+) + geom_point()
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
 
 ```{r}
+
+
+                                  
+
 # fix boruta intoa  formula
 boruta_biomass_formula_l<-lapply(Boruta_BacFun_Biomass, fixed_boruta_formula)
 
@@ -515,6 +450,7 @@ t0-t1 # takes 4.5h for 1 caret::train run on my system; boruta took ~4h at 3000 
 
 
 save(model_borutized_biomass_l, file = "./Data/model_borutized_biomass_l.RData" )
+
 
 # check different mtry
 lapply(model_borutized_biomass_l, function(x)
@@ -574,6 +510,7 @@ ggplot(
 #### calculate RMSE for my model
 
 # predict biomas values in test set
+
 prediction<-caret::predict.train(object = model_borutized_biomass_l$Bac_Bulk, newdata = train_test_df_l$Bac_Bulk$data_Test)
 
 # define the eror between test and training set
@@ -617,6 +554,9 @@ plot(train_test_df_l$Fun_Bulk$data_Test$shoot_biomass, error)
 
 
 prediction<-caret::predict.train(object = model_borutized_biomass_l$Fun_Rhizo, newdata = train_test_df_l$Fun_Rhizo$data_Test)
+
+prediction<-caret::predict.train(object = model_borutized_biomass, newdata = train_test_df_l$Fun_Rhizo$data_Test)
+
 
 # define the eror between test and training set
 error<- prediction - train_test_df_l$Fun_Rhizo$data_Test$shoot_biomass
