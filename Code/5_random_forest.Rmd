@@ -634,15 +634,16 @@ return(x)
 ## 8 -  Visualize the flower features on a heat tree 
 
 ```{r}
-
+#deine a function to put the ASV importance from boruta into a heat tree, using a phyloseq object
+ps_and_boruta_to_heat_tree<-function(ps_obj, boruta_ASV_stats){
 
 ####################### now make it a metacoder object
 
 #rename boruta importances
-rf_importance_byOTU<-ASV_stats_confirmed$Bac_Bulk
+rf_importance_byOTU<-boruta_ASV_stats
 
 # transform from phyloseq to  taxmap object
-rf_important_metacoder<-parse_phyloseq(prune_taxa(taxa = ASV_confirmed_l[[1]], x = CSS_BacFunBulkRhizo_ps_l$Bac_Bulk) )
+rf_important_metacoder<-parse_phyloseq(prune_taxa(taxa = rownames(boruta_ASV_stats), x = ps_obj) )
 
 
 
@@ -679,7 +680,7 @@ rf_important_metacoder$data$RF_importance_nodes$mean_meamImp_per_taxa<-
   rf_important_metacoder$data$RF_importance_nodes$subtaxa_number
 
 #Override k__bacteria summed mean importance as it is meaningless
-rf_important_metacoder$data$RF_importance_nodes$meanImp[1]<-3.5
+rf_important_metacoder$data$RF_importance_nodes$meanImp[1]<-min(rf_important_metacoder$data$RF_importance_nodes$meanImp)
 
 #define the minimum and maximum ASV importance to plot
 min_RF_importance<-min(rf_importance_byOTU$meanImp) 
@@ -689,7 +690,7 @@ max_RF_importance<-max(rf_importance_byOTU$meanImp)
 
 #plot heat tree
 set.seed(1)
-heat_tree(rf_important_metacoder,
+output<-heat_tree(rf_important_metacoder,
                  node_size = rf_important_metacoder$data$RF_importance_nodes$mean_meamImp_per_taxa  , # n_obs is a function that calculates, in this case, the number of OTUs per taxon
                  node_label = taxon_names,
                  node_color = rf_important_metacoder$data$RF_importance_nodes$meanImp, # A column from `obj$data$diff_table`
@@ -699,14 +700,38 @@ heat_tree(rf_important_metacoder,
                  node_size_axis_label = "Size: mean taxon importance",
                  node_color_axis_label = "Color: summed taxon importance",
                  layout = "davidson-harel", # The primary layout algorithm
-                 initial_layout = "reingold-tilford", # The layout algorithm that initializes node locations
-                 output_file = "./Results/RF_features_bulk_bac.pdf") # Saves the plot as a pdf file
+                 initial_layout = "reingold-tilford") # The layout algorithm that initializes node locations
+
+return(output)
+
+}
+
+#execute custom function, generating 4 heat trees as phyloseq objects
+imporatance_Heat_tree_l<-mapply(function(x,y)
+  ps_and_boruta_to_heat_tree(ps_obj = x,boruta_ASV_stats = y),
+  x = CSS_BacFunBulkRhizo_ps_l, 
+  y=ASV_stats_confirmed,
+  SIMPLIFY = FALSE)
 
 
-
-
+#make a pannel of ehat trees
+pannel_heat_trees_imp_ASVs<-
+  ggarrange(imporatance_Heat_tree_l$Bac_Bulk,
+            imporatance_Heat_tree_l$Bac_Rhizo,
+            imporatance_Heat_tree_l$Fun_Bulk,
+            imporatance_Heat_tree_l$Fun_Rhizo,
+            ncol =2, 
+            nrow = 2,
+            labels = c("Bacteria, bulk",
+                       "Bacteria, rhizo",
+                       "Fungi, bulk",
+                       "Fungi, rhizo"))
+#save trees
+ggsave(pannel_heat_trees_imp_ASVs,
+       filename = "./Results/RF_importance_HeatTree.pdf",
+       width = 30,
+       height = 30,
+       units = "cm")
 ```
-
-
 
 
