@@ -21,12 +21,8 @@ library(caret)
 library(randomForest)
 library(metacoder)
 
-
-
 # increases memory limit used by R
 memory.limit(size = 350000)
-
-
 
 #load the phyloseq objects containing all microbiome data
 load(file = "./Data/CSS_BacFun_ps_l.RData")
@@ -37,10 +33,7 @@ load(file = "./Data/CSS_BacFun_ps_l.RData")
 # 1 - define a few functions of interest
 ```{r}
 
-
-
-
-
+#prepare input to boruta
 single_physeq_to_borutaInput<-function (physeq_object, variable_to_be_classified){
   # boruta expects a transposed OTU table with variable_to_be_classified as a added variable
   # the output is a list of df ready to be used as input to boruta  
@@ -71,12 +64,6 @@ single_physeq_to_borutaInput<-function (physeq_object, variable_to_be_classified
   return(output)
 }
 
-
-
-
-
-
-
 # write a function to split training and test data from a phyloseq object
 train_and_test_spliter<-function(ps_object, variable_to_be_classified){
   
@@ -105,10 +92,6 @@ train_and_test_spliter<-function(ps_object, variable_to_be_classified){
   
 }
 
-
-
-
-
 # define a function to fix borta objects and put them into formula format
 fixed_boruta_formula<-function(boruta_object){
   # this fucntion takes a boruta ofbect, fixes the inconclusive tas into importnat o unimportnat, and then generates a formula
@@ -124,7 +107,6 @@ fixed_boruta_formula<-function(boruta_object){
   
   return(formula_boruta)
 }
-
 
 # put fixing, spliting, training and testing all in a single function
 fix_split_train<-function (boruta_output_l, ps_object_l, variable_to_be_classified){
@@ -179,19 +161,6 @@ fix_split_train<-function (boruta_output_l, ps_object_l, variable_to_be_classifi
   
   
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 # define function to extract some key model metrics after CV precision testing
 extract_confusionmatrix_metrics<-function(CV_output_l, Imp_ASV_stats_l){
@@ -337,14 +306,16 @@ Boruta_BacFun_Biomass<-list("Bac_Bulk" = Boruta_Bac_Biomass$Bac_Bulk,
 ```
 
 
-#fix split and train in a single replicated function
+
+# fix split and train in a single replicated function
+~ 4h to run; file too big for github
 ```{r}
 set.seed(23456)
 replicated_model<-replicate(10, fix_split_train(boruta_output_l = Boruta_BacFun_Biomass,
                                                 ps_object_l = CSS_BacFunBulkRhizo_ps_l,
                                                 variable_to_be_classified ="shoot_biomass" ))
 
-save(replicated_model, file = "./Data/replicated_model.RData")
+# save(replicated_model, file = "./Data/replicated_model.RData")
 load( file = "./Data/replicated_model.RData")
 
 ```
@@ -353,50 +324,133 @@ load( file = "./Data/replicated_model.RData")
 
 
 # test replicated models
+## quick look in some results
 ```{r}
 
-
-names(replicated_model) #1-4 as data slice, 1-10 as replicate
-
-
-replicated_model[1,1][1]$Bac_Bulk$times[1]$everything[3] #model
-replicated_model[2,1][1]$Bac_Rhizo$times[1]$everything[3] #model
-replicated_model[3,1][1]$Fun_Bulk$times[1]$everything[3] #model
-replicated_model[4,1][1]$Fun_Rhizo$times[1]$everything[3] #model
-
-replicated_model[1,7][1]$Bac_Bulk$times[1]$everything[3] #model
-replicated_model[2,7][1]$Bac_Rhizo$times[1]$everything[3] #model
-replicated_model[3,7][1]$Fun_Bulk$times[1]$everything[3] #model
-replicated_model[4,7][1]$Fun_Rhizo$times[1]$everything[3] #model
-
-replicated_model[1,1]$Bac_Bulk$times #model
-replicated_model[2,7][1]$Bac_Rhizo #model
-replicated_model[3,7][1]$Fun_Bulk #model
-replicated_model[4,7][1]$Fun_Bulk #model
-
-lapply(replicated_model, function(x)
-  )
+# shows RMSE  and Rsquared  for each mtry
+lapply(replicated_model[2,], function(y)
+  lapply(y, function(x) # in each fo the 10 models..
+  arrange(x$results, RMSE) )) # check the results of each 4-split
 
 
-# check different mtry
-lapply(replicated_model[1], function(x)
-  arrange(x$results, RMSE) %>% head)
-
-
-
+################ test models on test set
+# i want average+-sd R2 and RMSE from the 10 models
 
 #quick plot of predicted VS test set
-
-
+library(ggpubr)
 ggplot(
-  data = train_test_df_l$Bac_Bulk$data_Test,
-  aes(x = train_test_df_l$Bac_Bulk$data_Test$shoot_biomass,
-      y = caret::predict.train(object = model_borutized_biomass_l$Bac_Bulk,
-              newdata = train_test_df_l$Bac_Bulk$data_Test))
-) + geom_point()
+  data = replicated_model[1,1]$train_test_l$Bac_Bulk$data_Test,
+  aes(x = replicated_model[1,1]$train_test_l$Bac_Bulk$data_Test$shoot_biomass,
+      y = caret::predict.train(object = replicated_model[2,1]$boruta_feature_rf_repeatedcv$Bac_Bulk,
+                                 newdata = replicated_model[1,1]$train_test_l$Bac_Bulk$data_Test))) + 
+  geom_point()+
+   stat_cor(aes(label = paste(after_stat(rr.label), after_stat(p.label), sep = "~`,`~")))+
+  geom_smooth(method = "lm")
+  
+```
+
+# calculate R2 and RSME agaisnt test set
+```{r}
+# loop to calculate R2 and RSME across a replicatd list of test.train data and their respective models
+
+#### loop starts ###
+
+#create empty list to store results
+R2_RMSE_l<-list() 
+
+# define range of data partitions like Bac_bulk
+for (i in 1:length(Boruta_BacFun_Biomass)){ 
+
+  # save each iterations of the 10 replicated models....
+  R2_RMSE_l[[i]]<-mapply(function(x,y){
+  
+    # predict biomas values in test set
+    prediction<-caret::predict.train(object = y[[i]],
+                                     newdata = x[[i]]$data_Test)
+    
+    # define the eror between test and training set
+    error<- prediction - x[[i]]$data_Test$shoot_biomass
+    
+    
+    #calculate r2
+    r2_output<-cor(x[[i]]$data_Test$shoot_biomass, prediction)^2
+    
+    #calculate Root Mean Square Error
+    RMSE_output<-sqrt(mean(error ^ 2))
+    
+    #combine metrics and set column names
+    output<-c(r2_output,RMSE_output)
+    names(output)<-c("R2", "RMSE")
+    
+    return(output)
+
+    },
+    x = t(replicated_model)[,1], # train/test, 10x4 splits
+    y = t(replicated_model)[,2], # models, 10x4 splits
+    SIMPLIFY = FALSE)
+}
+
+#### loop ends ###
+
+# adjsut names of data partitions
+names(R2_RMSE_l)<-names(Boruta_BacFun_Biomass)
+
+# put metrics from the 10 models into a list of data frames
+R2_RMSE_l<-lapply(R2_RMSE_l, function(x)
+  as.data.frame(do.call(rbind, x)))
+
+#put data paritions as avariable, remove unecessary characthers
+R2_RMSE_df<-do.call(rbind, R2_RMSE_l)%>%rownames_to_column(var = "data_parition")
+R2_RMSE_df$data_parition<-gsub(pattern = "\\..*", replacement = "", x = R2_RMSE_df$data_parition)
+
+#seaprate data partitions into two columsn
+R2_RMSE_df<-tidyr::separate(data = R2_RMSE_df,
+                            col = data_parition,
+                            into = c("Kingdom", "Compartment"),
+                            sep = "_")
+```
+
+
+# plot model R2 and RMSE agasint test set
+```{r}
+#plot R2
+r2_RF<-ggplot(R2_RMSE_df, aes(x = Kingdom, y = R2, fill = Compartment ))+
+  geom_violin(alpha = 0.5, position=position_dodge(1))+
+  geom_dotplot(binaxis = "y",
+               stackdir = "center",
+              position=position_dodge(1),
+               dotsize = 0.5) +
+  theme_bw()+
+  ggtitle(label = "R2 of 10 RF models",
+           subtitle = "based on ASVs set as important by Boruta" )
+
+
+#plot RMSE
+RMSE_RF<-ggplot(R2_RMSE_df, aes(x = Kingdom, y = RMSE, fill = Compartment ))+
+  geom_violin(alpha = 0.5, position=position_dodge(1))+
+  geom_dotplot(binaxis = "y",
+               stackdir = "center",
+              position=position_dodge(1),
+               dotsize = 0.5) +
+  theme_bw()+
+  ggtitle(label = "Root Mean Square error of 10 RF models",
+           subtitle = "based on ASVs set as important by Boruta" )
+
+
+# save both plots as pdf
+ggsave(filename = "./Results/RF_10models_R2_RMSE_IncludesNoFrass.pdf",
+       plot = ggarrange(r2_RF,RMSE_RF, common.legend = TRUE, labels ="AUTO"),
+       width = 30,
+       height = 30,
+       units = "cm")
 
 
 
+```
+
+
+#check taxonomies of Boruta-selected features
+```{r}
 
 ```
 
@@ -404,167 +458,4 @@ ggplot(
 
 
 
-
-
-
-
-
-
-
-
-```{r}
-
-
-                                  
-
-# fix boruta intoa  formula
-boruta_biomass_formula_l<-lapply(Boruta_BacFun_Biomass, fixed_boruta_formula)
-
-#split train and test sets
-train_test_df_l<-lapply(CSS_BacFunBulkRhizo_ps_l, function (x)
-  train_and_test_spliter(ps_object = x, variable_to_be_classified ="shoot_biomass" ))
-
-# define random seed
-set.seed(4551)
-
-#define training model
-train.control <- trainControl(method = "repeatedcv", # set trainig/data split controls for the train function
-                              number = 5, 
-                              repeats = 100)
-
-# train the model... 33 min for fun_rhizo
-t0<-Sys.time()
-model_borutized_biomass_l <-mapply(function (x,y)
-                            caret::train(form = x, 
-                                         data = y$data_Train, 
-                                         method = "rf", 
-                                         trControl = train.control, 
-                                         ntree= 1000,
-                                         tuneLength = 7),
-                            x = boruta_biomass_formula_l,
-                            y = train_test_df_l,
-                            SIMPLIFY = FALSE)
-t1<-Sys.time()
-
-t0-t1 # takes 4.5h for 1 caret::train run on my system; boruta took ~4h at 3000 trees
-
-
-save(model_borutized_biomass_l, file = "./Data/model_borutized_biomass_l.RData" )
-
-
-# check different mtry
-lapply(model_borutized_biomass_l, function(x)
-  arrange(x$results, RMSE) %>% head)
-
-# check the predictions of the model on the test set
-caret::predict.train(object = model_borutized_biomass,
-              newdata = train_test_df_l$Fun_Rhizo$data_Train)
-
-#values of biomass on test set
-train_test_df_l$Fun_Rhizo$data_Test$shoot_biomass
-
-#quick plot of predicted VS test set
-
-
-ggplot(
-  data = train_test_df_l$Bac_Bulk$data_Test,
-  aes(x = train_test_df_l$Bac_Bulk$data_Test$shoot_biomass,
-      y = caret::predict.train(object = model_borutized_biomass_l$Bac_Bulk,
-              newdata = train_test_df_l$Bac_Bulk$data_Test))
-) + geom_point()
-
-
-ggplot(
-  data = train_test_df_l$Bac_Rhizo$data_Test,
-  aes(x = train_test_df_l$Bac_Rhizo$data_Test$shoot_biomass,
-      y = caret::predict.train(object = model_borutized_biomass_l$Bac_Rhizo,
-              newdata = train_test_df_l$Bac_Rhizo$data_Test))
-) + geom_point()
-
-
-
-ggplot(
-  data = train_test_df_l$Fun_Bulk$data_Test,
-  aes(x = train_test_df_l$Fun_Bulk$data_Test$shoot_biomass,
-      y = caret::predict.train(object = model_borutized_biomass_l$Fun_Bulk,
-              newdata = train_test_df_l$Fun_Bulk$data_Test))
-) + geom_point()
-
-
-
-ggplot(
-  data = train_test_df_l$Fun_Rhizo$data_Test,
-  aes(x = train_test_df_l$Fun_Rhizo$data_Test$shoot_biomass,
-      y = caret::predict.train(object = model_borutized_biomass_l$Fun_Rhizo,
-              newdata = train_test_df_l$Fun_Rhizo$data_Test))
-) + geom_point()
-
-
-
-
-
-
-
-
-
-#### calculate RMSE for my model
-
-# predict biomas values in test set
-
-prediction<-caret::predict.train(object = model_borutized_biomass_l$Bac_Bulk, newdata = train_test_df_l$Bac_Bulk$data_Test)
-
-# define the eror between test and training set
-error<- prediction - train_test_df_l$Bac_Bulk$data_Test$shoot_biomass
-
-#calculate Root Mean Square Error
-sqrt(mean(error ^ 2))
-
-# plot error (residuals
-plot(train_test_df_l$Bac_Bulk$data_Test$shoot_biomass, error)
-
-
-
-
-prediction<-caret::predict.train(object = model_borutized_biomass_l$Bac_Rhizo, newdata = train_test_df_l$Bac_Rhizo$data_Test)
-
-# define the eror between test and training set
-error<- prediction - train_test_df_l$Bac_Rhizo$data_Test$shoot_biomass
-
-#calculate Root Mean Square Error
-sqrt(mean(error ^ 2))
-
-# plot error (residuals
-plot(train_test_df_l$Bac_Rhizo$data_Test$shoot_biomass, error)
-
-
-
-
-prediction<-caret::predict.train(object = model_borutized_biomass_l$Fun_Bulk, newdata = train_test_df_l$Fun_Bulk$data_Test)
-
-# define the eror between test and training set
-error<- prediction - train_test_df_l$Fun_Bulk$data_Test$shoot_biomass
-
-#calculate Root Mean Square Error
-sqrt(mean(error ^ 2))
-
-# plot error (residuals
-plot(train_test_df_l$Fun_Bulk$data_Test$shoot_biomass, error)
-
-
-
-
-prediction<-caret::predict.train(object = model_borutized_biomass_l$Fun_Rhizo, newdata = train_test_df_l$Fun_Rhizo$data_Test)
-
-prediction<-caret::predict.train(object = model_borutized_biomass, newdata = train_test_df_l$Fun_Rhizo$data_Test)
-
-
-# define the eror between test and training set
-error<- prediction - train_test_df_l$Fun_Rhizo$data_Test$shoot_biomass
-
-#calculate Root Mean Square Error
-sqrt(mean(error ^ 2))
-
-# plot error (residuals
-plot(train_test_df_l$Fun_Rhizo$data_Test$shoot_biomass, error)
-```
 
