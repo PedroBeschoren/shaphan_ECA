@@ -476,12 +476,6 @@ ASV_confirmed_l<-lapply(ASV_stats_confirmed, function(x) rownames(x))
 
 imp_ps<-prune_taxa(taxa = ASV_confirmed_l[[1]], x = CSS_BacFunBulkRhizo_ps_l$Bac_Bulk) 
 
-imp_ps@tax_table[,2] %>%table%>%sort(decreasing = TRUE)
-imp_ps@tax_table[,3] %>%table%>%sort(decreasing = TRUE)
-imp_ps@tax_table[,4] %>%table%>%sort(decreasing = TRUE)
-imp_ps@tax_table[,5] %>%table%>%sort(decreasing = TRUE)
-imp_ps@tax_table[,6] %>%table%>%sort(decreasing = TRUE)
-
 imp_melted<-psmelt(imp_ps)
 
 to_merge<-rownames_to_column(ASV_stats_confirmed$Bac_Bulk[,1:2], var = "OTU")
@@ -492,7 +486,7 @@ imp_melted%>%
   group_by(Phylum)%>%
   summarize(mean_imp = mean(meanImp),
             imp_sd = sd(meanImp),
-            n=n()/177,
+            n=n()/nsamples(CSS_BacFunBulkRhizo_ps_l$Bac_Bulk),
             linear_biomass_corr = cor(shoot_biomass, Abundance))%>%view
 
 imp_melted%>%
@@ -517,9 +511,97 @@ imp_melted%>%
             n=n()/177,
             linear_biomass_corr = cor(shoot_biomass, Abundance))%>%view
 
-imp_melted%>%
-cor(shoot_biomass, Abundance)
 
+imp_melted%>%
+  group_by(Family)%>%
+  summarize(mean_imp = mean(meanImp),
+            imp_sd = sd(meanImp),
+            n=n()/177,
+            linear_biomass_corr = cor(shoot_biomass, Abundance))%>%dplyr::arrange(desc(n))
+
+
+
+
+```
+
+
+
+
+# explote taxonomy and importance of features
+```{r}
+# define a function to extract  mean importance and linear biomass correlations of each taxonomy of the ASVs selected by the random forest
+Importance_per_taxon<-function(ps, ASV_stats_boruta){
+  
+  confirmed_ASV<-rownames(ASV_stats_boruta)
+  
+imp_ps<-prune_taxa(taxa = confirmed_ASV, x = ps) 
+
+imp_melted<-psmelt(imp_ps)
+
+to_merge<-rownames_to_column(ASV_stats_boruta[,1:2], var = "OTU")
+
+imp_melted<-left_join(imp_melted, to_merge, by ="OTU")
+
+phylum_table<-imp_melted%>%
+  group_by(Phylum)%>%
+  summarize(mean_imp = mean(meanImp),
+            imp_sd = sd(meanImp),
+            n=n()/nsamples(ps),
+            linear_biomass_corr = round(cor(shoot_biomass, Abundance), digits = 3))%>%
+  dplyr::arrange(desc(n))%>%as.data.frame()
+
+class_table<-imp_melted%>%
+  group_by(Class)%>%
+  summarize(mean_imp = mean(meanImp),
+            imp_sd = sd(meanImp),
+            n=n()/nsamples(ps),
+            linear_biomass_corr = round(cor(shoot_biomass, Abundance), digits = 3))%>%
+  dplyr::arrange(desc(n))%>%as.data.frame()
+
+order_table<-imp_melted%>%
+  group_by(Order)%>%
+  summarize(mean_imp = mean(meanImp),
+            imp_sd = sd(meanImp),
+            n=n()/nsamples(ps),
+            linear_biomass_corr = round(cor(shoot_biomass, Abundance), digits = 3))%>%
+  dplyr::arrange(desc(n))%>%as.data.frame()
+
+           
+family_table<-imp_melted%>%
+  group_by(Family)%>%
+  summarize(mean_imp = mean(meanImp),
+            imp_sd = sd(meanImp),
+            n=n()/nsamples(ps),
+            linear_biomass_corr = round(cor(shoot_biomass, Abundance), digits = 3))%>%
+  dplyr::arrange(desc(n))%>%as.data.frame()
+
+genus_table<-imp_melted%>%
+  group_by(Genus)%>%
+  summarize(mean_imp = mean(meanImp),
+            imp_sd = sd(meanImp),
+            n=n()/nsamples(ps),
+            linear_biomass_corr = round(cor(shoot_biomass, Abundance), digits = 3))%>%
+  dplyr::arrange(desc(n))%>%as.data.frame()
+
+output<-list("phylum_table" = phylum_table,
+             "class_table" = class_table,
+             "order_table" = order_table,
+             "family_table" = family_table,
+             "genus_table" = genus_table)
+return(output)
+
+}
+
+# execute custom function on list of boruta and ps obejcts
+importance_per_taxonomy<-mapply(function(x,y)
+  Importance_per_taxon(ps = x,ASV_stats_boruta = y),
+  x = CSS_BacFunBulkRhizo_ps_l,
+  y = ASV_stats_confirmed,
+  SIMPLIFY = FALSE)
+
+
+#export this table as txt
+capture.output(importance_per_taxonomy, file = "./Results/importance_per_taxonomy.txt")
 
 ```
 
@@ -529,22 +611,15 @@ cor(shoot_biomass, Abundance)
 
 
 
-
-
-
-
-# heat tree atemps
+# heat tree 
 ```{r}
-#exchange species info per ASV ID; remove taxonomy assingment confidence intervals
+#prepare ps object for heat tree
 CSS_BacFunBulkRhizo_ps_l<-lapply(CSS_BacFunBulkRhizo_ps_l, function(x){
   
   # let's remove the "r__"ranks from the taxonomy, they can be useful but will pollute our plot
 tax_table(x)[, colnames(tax_table(x))] <- gsub(pattern = "[a-z]__", # regular expression pattern to search for
                                                                    x = tax_table(x)[, colnames(tax_table(x))], # "df"
                                                                    replacement = "") # replacement for pattern
-  
-  
-
 x@tax_table<-x@tax_table[,1:6]
 return(x)
 })
