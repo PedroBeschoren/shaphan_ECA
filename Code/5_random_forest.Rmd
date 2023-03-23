@@ -346,6 +346,10 @@ ggplot(
   geom_point()+
    stat_cor(aes(label = paste(after_stat(rr.label), after_stat(p.label), sep = "~`,`~")))+
   geom_smooth(method = "lm")
+
+
+
+replicated_model[2,1]$boruta_feature_rf_repeatedcv$Bac_Bulk$finalModel$forest$bestvar
   
 ```
 
@@ -451,10 +455,182 @@ ggsave(filename = "./Results/RF_10models_R2_RMSE_IncludesNoFrass.pdf",
 
 #check taxonomies of Boruta-selected features
 ```{r}
+# fix oruta
+fixed_boruta<-lapply(Boruta_BacFun_Biomass, function(x)
+  TentativeRoughFix(x))
+
+# get ocnfirmed ASVs
+ASV_stats_confirmed<-lapply(fixed_boruta, function(x)
+  filter(attStats(x), decision == "Confirmed"))
+
+#get ASV ID
+ASV_confirmed_l<-lapply(ASV_stats_confirmed, function(x) rownames(x))
+
 
 ```
 
 
+
+# explote taxonomy and importance of features
+```{r}
+
+imp_ps<-prune_taxa(taxa = ASV_confirmed_l[[1]], x = CSS_BacFunBulkRhizo_ps_l$Bac_Bulk) 
+
+imp_ps@tax_table[,2] %>%table%>%sort(decreasing = TRUE)
+imp_ps@tax_table[,3] %>%table%>%sort(decreasing = TRUE)
+imp_ps@tax_table[,4] %>%table%>%sort(decreasing = TRUE)
+imp_ps@tax_table[,5] %>%table%>%sort(decreasing = TRUE)
+imp_ps@tax_table[,6] %>%table%>%sort(decreasing = TRUE)
+
+imp_melted<-psmelt(imp_ps)
+
+to_merge<-rownames_to_column(ASV_stats_confirmed$Bac_Bulk[,1:2], var = "OTU")
+
+imp_melted<-left_join(imp_melted, to_merge, by ="OTU")
+
+imp_melted%>%
+  group_by(Phylum)%>%
+  summarize(mean_imp = mean(meanImp),
+            imp_sd = sd(meanImp),
+            n=n()/177,
+            linear_biomass_corr = cor(shoot_biomass, Abundance))%>%view
+
+imp_melted%>%
+  group_by(Class)%>%
+  summarize(mean_imp = mean(meanImp),
+            imp_sd = sd(meanImp),
+            n=n()/177,
+            linear_biomass_corr = cor(shoot_biomass, Abundance))%>%view
+
+imp_melted%>%
+  group_by(Order)%>%
+  summarize(mean_imp = mean(meanImp),
+            imp_sd = sd(meanImp),
+            n=n()/177,
+            linear_biomass_corr = cor(shoot_biomass, Abundance))%>%view
+
+           
+imp_melted%>%
+  group_by(Family)%>%
+  summarize(mean_imp = mean(meanImp),
+            imp_sd = sd(meanImp),
+            n=n()/177,
+            linear_biomass_corr = cor(shoot_biomass, Abundance))%>%view
+
+imp_melted%>%
+cor(shoot_biomass, Abundance)
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+# heat tree atemps
+```{r}
+#exchange species info per ASV ID; remove taxonomy assingment confidence intervals
+CSS_BacFunBulkRhizo_ps_l<-lapply(CSS_BacFunBulkRhizo_ps_l, function(x){
+  
+  # let's remove the "r__"ranks from the taxonomy, they can be useful but will pollute our plot
+tax_table(x)[, colnames(tax_table(x))] <- gsub(pattern = "[a-z]__", # regular expression pattern to search for
+                                                                   x = tax_table(x)[, colnames(tax_table(x))], # "df"
+                                                                   replacement = "") # replacement for pattern
+  
+  
+
+x@tax_table<-x@tax_table[,1:6]
+return(x)
+})
+
+
+
+
+```
+
+
+
+## 8 -  Visualize the flower features on a heat tree 
+
+```{r}
+
+
+####################### now make it a metacoder object
+
+#rename boruta importances
+rf_importance_byOTU<-ASV_stats_confirmed$Bac_Bulk
+
+# transform from phyloseq to  taxmap object
+rf_important_metacoder<-parse_phyloseq(prune_taxa(taxa = ASV_confirmed_l[[1]], x = CSS_BacFunBulkRhizo_ps_l$Bac_Bulk) )
+
+
+
+#get abundance per taxon
+rf_important_metacoder$data$tax_abund<-calc_taxon_abund(obj = rf_important_metacoder, 
+                                      data = "otu_table",
+                                      cols = rf_important_metacoder$data$sample_data$sample_id)
+
+
+########### let's add RF importance to the metacoder object######
+
+# add metacoder taxon ID to RF importnat OTUs
+rf_importance_byOTU$taxon_id<-rf_important_metacoder$data$otu_table$taxon_id
+
+# add RF importance to metacoder object
+rf_important_metacoder$data$RF_importance<-tibble(rf_importance_byOTU[,c(1:2,7)])
+
+#get summed importance per taxon
+rf_important_metacoder$data$RF_importance_nodes<-calc_taxon_abund(obj = rf_important_metacoder, 
+                                      data = "RF_importance")
+
+#define number of subtaxa
+subtaxa_number<-n_subtaxa(rf_important_metacoder)+1
+
+# transform zeros into 1 so you don't try to divide by zero on the next step
+subtaxa_number[subtaxa_number==0]<-1
+
+# add this subtaxa number to part of the metacoder tree object
+rf_important_metacoder$data$RF_importance_nodes$subtaxa_number<-subtaxa_number
+
+# divide the summed meam importance y the number of subtaxa. ASV nodes shuold ahve the same importance as the original object
+rf_important_metacoder$data$RF_importance_nodes$mean_meamImp_per_taxa<-
+  rf_important_metacoder$data$RF_importance_nodes$meanImp /
+  rf_important_metacoder$data$RF_importance_nodes$subtaxa_number
+
+#Override k__bacteria summed mean importance as it is meaningless
+rf_important_metacoder$data$RF_importance_nodes$meanImp[1]<-3.5
+
+#define the minimum and maximum ASV importance to plot
+min_RF_importance<-min(rf_importance_byOTU$meanImp) 
+max_RF_importance<-max(rf_importance_byOTU$meanImp) 
+
+########### done! ######
+
+#plot heat tree
+set.seed(1)
+heat_tree(rf_important_metacoder,
+                 node_size = rf_important_metacoder$data$RF_importance_nodes$mean_meamImp_per_taxa  , # n_obs is a function that calculates, in this case, the number of OTUs per taxon
+                 node_label = taxon_names,
+                 node_color = rf_important_metacoder$data$RF_importance_nodes$meanImp, # A column from `obj$data$diff_table`
+                node_size_interval = c(min_RF_importance, max_RF_importance), # define node size range according RF importances
+                 node_label_size_range = c(0.005, 0.015),
+                 node_size_range = c(0.009, 0.03),
+                 node_size_axis_label = "Size: mean taxon importance",
+                 node_color_axis_label = "Color: summed taxon importance",
+                 layout = "davidson-harel", # The primary layout algorithm
+                 initial_layout = "reingold-tilford", # The layout algorithm that initializes node locations
+                 output_file = "./Results/RF_features_bulk_bac.pdf") # Saves the plot as a pdf file
+
+
+
+
+```
 
 
 
