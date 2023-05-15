@@ -306,6 +306,31 @@ lapply(CSS_bacfun_BulkRhizo_ps_l$Fun, function (x)
               Factor= as.factor(as(phyloseq::sample_data(x),"data.frame")$frass_treatment)))
 ```
 
+library(pairwiseAdonis)
+
+## SUBSET
+x <- CSS_bacfun_BulkRhizo_ps_l$Bac$rhizosphere # select Bac/Fun and rhizosphere/bulk soil
+
+x <- subset_samples(x, frass_source=="X" & frass_dose=="5")
+
+dist <- phyloseq::distance(otu_table(x), method="bray")
+metadata <- as(sample_data(x), "data.frame")
+
+
+pairwise.adonis2(dist ~ frass_treatment, data = metadata)
+
+
+## ALL
+x <- CSS_bacfun_BulkRhizo_ps_l$Bac$rhizosphere # select Bac/Fun and rhizosphere/bulk soil
+
+
+dist <- phyloseq::distance(otu_table(x), method="bray")
+metadata <- as(sample_data(x), "data.frame")
+
+
+pairwise.adonis2(dist ~ frass_treatment_dose_source, data = metadata)
+
+
 
 
 # 4 - Alpha diversity calculations & plot
@@ -399,6 +424,20 @@ ggsave(filename = "./Results/alpha_div_BacFun_BulkRhizo.pdf",
        units = "cm")
 
 ```
+
+
+## CUSTOM PLOT
+
+x <- calculated_diversity_filtred_df_l$Bac
+x <- subset(x, frass_source=="X")
+
+ggplot(x, aes( x =frass_dose, y = Shannon, fill =frass_dose ))+
+  geom_violin(aes(alpha = 0.3))+
+  geom_dotplot(binaxis = "y", stackdir = "center", position = "dodge", binwidth = 0.05, aes( x =frass_dose))+
+  theme_bw()+
+  facet_wrap(~ frass_treatment )+
+  labs(title = paste("Shannon diversity indexes"))
+
 
 
 # 5 - alpha diversity tests
