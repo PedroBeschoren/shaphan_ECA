@@ -124,28 +124,29 @@ NMDS_Fun_l<-NMDS_calculation_l(physeq_l = CSS_bacfun_ps_sampletype_l$Fun,
 
 
 # arrange all 3 plots in a pannel
+
 NMDS_Bac_l<-ggarrange(NMDS_Bac_l$bulk_soil,
                         NMDS_Bac_l$rhizosphere,
-                        NMDS_Bac_l$frass)
+                        NMDS_Bac_l$frass, common.legend = TRUE,
+                          legend = "top")
 
 NMDS_Fun_l<-ggarrange(NMDS_Fun_l$bulk_soil,
                         NMDS_Fun_l$rhizosphere,
-                        NMDS_Fun_l$frass)
-
-
+                        NMDS_Fun_l$frass, common.legend = TRUE,
+                          legend = "top")
 
 #export plot
 ggsave(filename = "./Results/NMDS_Bac_3_sample_types.pdf" ,
        plot = NMDS_Bac_l,
-       width = 30,
-       height =30,
-       units = "cm" )
+       width = 195,
+       height = 195,
+       units = "mm" )
 
 ggsave(filename = "./Results/NMDS_Fun_3_sample_types.pdf" ,
        plot = NMDS_Fun_l,
-       width = 30,
-       height =30,
-       units = "cm" )
+       width = 195,
+       height = 195,
+       units = "mm" )
 
 
 
