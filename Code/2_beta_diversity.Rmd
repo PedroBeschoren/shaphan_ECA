@@ -187,19 +187,18 @@ NMDS_Fun_l<-NMDS_calculation_l(physeq_l = CSS_bacfun_BulkRhizo_ps_l$Fun,
 
 
 # arrange all 3 plots in a pannel
-NMDS_BacFun_l<-ggarrange(NMDS_Bac_l$bulk_soil,
-                        NMDS_Bac_l$rhizosphere,
-                        NMDS_Fun_l$bulk_soil,
-                        NMDS_Fun_l$rhizosphere)
+NMDS_BacFun_l<-ggarrange( plotlist = c(NMDS_Bac_l, NMDS_Fun_l),
+                          common.legend = TRUE,
+                          legend = "top")
 
 
 
 #export plot
 ggsave(filename = "./Results/NMDS_BacFun_BulkRhizo.pdf" ,
        plot = NMDS_BacFun_l,
-       width = 30,
-       height =30,
-       units = "cm" )
+       width = 190,
+       height =190,
+       units = "mm" )
 
 
 
