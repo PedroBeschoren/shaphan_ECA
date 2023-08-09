@@ -1,8 +1,5 @@
 
 # install the packages that will be needed to install other packages
-renv::restore(packages = c("devtools",
-                           "BiocManager",
-                           "remotes"))
 
 BiocManager::install("devtools")
 
@@ -47,8 +44,7 @@ BiocManager::install("locfit")
 BiocManager::install("DelayedArray")
 
 
-# install all other packages
-renv::restore()
+
 
 # update all packages
 renv::update()
