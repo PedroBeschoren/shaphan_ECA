@@ -90,7 +90,8 @@ NMDS_calculation_l <- function(physeq_l, ordination_output) {
                               ordination = y,
                               color ="frass_source",
                               shape = "frass_treatment_and_dose")+
-      scale_shape_manual(values=c(1,2,16, 17,7,8))+
+      scale_shape_manual(values=c(1,2,4,16, 17))+
+      geom_point(aes(fill = frass_source))+
       theme_classic() +
       labs(subtitle = paste("Stress", round(y$stress, digits=4))) +
       theme(plot.title = element_text(size = 10, face = "bold")) + # extarcts on where this is Bac or Fun, add to plot title
