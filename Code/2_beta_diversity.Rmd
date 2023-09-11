@@ -344,26 +344,66 @@ calculated_diversity_df_l<-mapply(function (x,y)
 
 
 #Lets see this on a simple boxplot for Shannon diversity index
-alpha_plot_basic<-lapply(calculated_diversity_df_l, function (x)
-  ggplot(x, aes( x =frass_treatment_and_dose, y = Shannon, fill =frass_source ))+
-  geom_violin(aes(alpha = 0.3))+
-  geom_dotplot(binaxis = "y", stackdir = "center", position = "dodge", binwidth = 0.05, aes( x =frass_treatment_and_dose))+
-    geom_text_repel(aes(label = rownames(x)))+
+alpha_plot_nofrass<-lapply(calculated_diversity_df_l, function (x)
+  ggplot(dplyr::filter(x, sample_type !="frass"), 
+         aes( x =frass_treatment_and_dose, y = Shannon, fill =frass_source, color = frass_source, alpha = 0.5  ))+
+  geom_violin(aes(alpha = 0.2))+
+  geom_dotplot(binaxis = "y", 
+               stackdir = "center",
+               position = "dodge",
+               binwidth = 0.04, 
+               aes( x =frass_treatment_and_dose))+
   theme_bw()+
+  scale_y_continuous(expand = c(0, 0), limits = c(0, NA))+
   facet_wrap(~ sample_type )+
   labs(title = paste("Shannon diversity indexes")))
 
 # add kingdom as subtitles
-alpha_plot_basic$Bac<-alpha_plot_basic$Bac + labs(subtitle = "Bacteria")
-alpha_plot_basic$Fun<-alpha_plot_basic$Fun + labs(subtitle = "Fungi")
+alpha_plot_nofrass$Bac<-alpha_plot_nofrass$Bac + labs(subtitle = "Bacteria")
+alpha_plot_nofrass$Fun<-alpha_plot_nofrass$Fun + labs(subtitle = "Fungi")
 
 
 #save as a plot
-ggsave(filename = "./Results/alpha_div_3_sample_types.pdf",
-       plot = ggarrange(alpha_plot_basic$Bac,
-                        alpha_plot_basic$Fun),
-       width = 40,
+ggsave(filename = "./Results/alpha_div_2_sample_types.pdf",
+       plot = ggarrange(alpha_plot_nofrass$Bac,
+                        alpha_plot_nofrass$Fun),
+       width = 30,
        height = 15,
+       units = "cm")
+
+
+
+
+
+
+
+
+#Lets see this on a simple boxplot for Shannon diversity index
+alpha_plot_frass<-lapply(calculated_diversity_df_l, function (x)
+  ggplot(dplyr::filter(x, sample_type =="frass"), 
+         aes( x =frass_treatment_and_dose, y = Shannon, fill =frass_source, color = frass_source, alpha = 0.5  ))+
+  geom_violin(aes(alpha = 0.2))+
+  geom_dotplot(binaxis = "y", 
+               stackdir = "center",
+               position = "dodge",
+               binwidth = 0.04, 
+               aes( x =frass_treatment_and_dose))+
+  theme_bw()+
+  scale_y_continuous(expand = c(0, 0), limits = c(0, NA))+
+  facet_wrap(~ sample_type )+
+  labs(title = paste("Shannon diversity indexes")))
+
+# add kingdom as subtitles
+alpha_plot_frass$Bac<-alpha_plot_frass$Bac + labs(subtitle = "Bacteria")
+alpha_plot_frass$Fun<-alpha_plot_frass$Fun + labs(subtitle = "Fungi")
+
+
+#save as a plot
+ggsave(filename = "./Results/alpha_div_frass_sample_types.pdf",
+       plot = ggarrange(alpha_plot_frass$Bac,
+                        alpha_plot_frass$Fun),
+       width = 25,
+       height = 20,
        units = "cm")
 
 
