@@ -43,7 +43,7 @@ source("./Code/functions_loading_and_decontamination.R")
 raw_bac_otutab<-otu_table(object = read.table(file = "./Data/16S_ECA_seqtab_final.txt",
                                               header = TRUE,
                                               row.names = 1, # first column has row names (ASV names)
-                                              check.names = FALSE), # prevents "X" to be added to column names, such as X49_16S,
+                                              check.names = FALSE), # prevents "X" to be added to column                                                                          names, such as X49_16S,
                           taxa_are_rows = TRUE)
 
 sample_sums(raw_bac_otutab)%>%sum
