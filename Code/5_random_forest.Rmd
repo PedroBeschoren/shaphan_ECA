@@ -308,18 +308,47 @@ Boruta_BacFun_Biomass<-list("Bac_Bulk" = Boruta_Bac_Biomass$Bac_Bulk,
 
 
 # fix split and train in a single replicated function
-~ 4h to run; file too big for github
+~ 4h to run; file too big for github.
+each series of 10 was run in an independent R session
 ```{r}
 set.seed(23456)
 replicated_model<-replicate(10, fix_split_train(boruta_output_l = Boruta_BacFun_Biomass,
                                                 ps_object_l = CSS_BacFunBulkRhizo_ps_l,
                                                 variable_to_be_classified ="shoot_biomass" ))
 
-# save(replicated_model, file = "./Data/replicated_model.RData")
-load( file = "./Data/replicated_model.RData")
+save(replicated_model, file = "./Data/replicated_model.RData")
+
+
+#run additional models on a different seed. we will join these results to the previous ones later
+set.seed(3456612)
+replicated_model2<-replicate(10, fix_split_train(boruta_output_l = Boruta_BacFun_Biomass,
+                                                ps_object_l = CSS_BacFunBulkRhizo_ps_l,
+                                                variable_to_be_classified ="shoot_biomass" ))
+
+save(replicated_model2, file = "./Data/replicated_model2.RData")
+
+
+set.seed(79873495)
+replicated_model3<-replicate(10, fix_split_train(boruta_output_l = Boruta_BacFun_Biomass,
+                                                ps_object_l = CSS_BacFunBulkRhizo_ps_l,
+                                                variable_to_be_classified ="shoot_biomass" ))
+save(replicated_model3, file = "./Data/replicated_model3.RData")
 
 ```
 
+
+# concatenate replicated models
+```{r}
+
+load( file = "./Data/replicated_model.RData")
+load( file = "./Data/replicated_model2.RData")
+load( file = "./Data/replicated_model3.RData")
+  
+replicated_model_train_test_l<-c(replicated_model[1,], replicated_model2[1,], replicated_model3[1,])
+replicated_model_boruta_feature_rf_repeatedcv <-c(replicated_model[2,], replicated_model2[2,], replicated_model3[2,])
+
+
+```
 
 
 
@@ -389,8 +418,11 @@ for (i in 1:length(Boruta_BacFun_Biomass)){
     return(output)
 
     },
-    x = t(replicated_model)[,1], # train/test, 10x4 splits
-    y = t(replicated_model)[,2], # models, 10x4 splits
+    x = replicated_model_train_test_l, # train/test, 10x4 splits
+    y = replicated_model_boruta_feature_rf_repeatedcv, # models, 10x4 splits
+    
+  #  x = t(replicated_model)[,1], # train/test, 10x4 splits
+  #  y = t(replicated_model)[,2], # models, 10x4 splits
     SIMPLIFY = FALSE)
 }
 
@@ -428,6 +460,9 @@ r2_RF<-ggplot(R2_RMSE_df, aes(x = Kingdom, y = R2, fill = Compartment ))+
   ggtitle(label = "R2 of 10 RF models",
            subtitle = "based on ASVs set as important by Boruta" )
 
+# test effect of compartment and kingdom on R2 for the model
+summary(aov(R2 ~ Compartment*Kingdom, data = R2_RMSE_df))
+
 
 #plot RMSE
 RMSE_RF<-ggplot(R2_RMSE_df, aes(x = Kingdom, y = RMSE, fill = Compartment ))+
@@ -439,6 +474,9 @@ RMSE_RF<-ggplot(R2_RMSE_df, aes(x = Kingdom, y = RMSE, fill = Compartment ))+
   theme_bw()+
   ggtitle(label = "Root Mean Square error of 10 RF models",
            subtitle = "based on ASVs set as important by Boruta" )
+
+# test effect of compartment and kingdom on RMSE for the model
+summary(aov(RMSE ~ Compartment*Kingdom, data = R2_RMSE_df))
 
 
 # save both plots as pdf
@@ -465,61 +503,6 @@ ASV_stats_confirmed<-lapply(fixed_boruta, function(x)
 
 #get ASV ID
 ASV_confirmed_l<-lapply(ASV_stats_confirmed, function(x) rownames(x))
-
-
-```
-
-
-
-# explote taxonomy and importance of features
-```{r}
-
-imp_ps<-prune_taxa(taxa = ASV_confirmed_l[[1]], x = CSS_BacFunBulkRhizo_ps_l$Bac_Bulk) 
-
-imp_melted<-psmelt(imp_ps)
-
-to_merge<-rownames_to_column(ASV_stats_confirmed$Bac_Bulk[,1:2], var = "OTU")
-
-imp_melted<-left_join(imp_melted, to_merge, by ="OTU")
-
-imp_melted%>%
-  group_by(Phylum)%>%
-  summarize(mean_imp = mean(meanImp),
-            imp_sd = sd(meanImp),
-            n=n()/nsamples(CSS_BacFunBulkRhizo_ps_l$Bac_Bulk),
-            linear_biomass_corr = cor(shoot_biomass, Abundance))%>%view
-
-imp_melted%>%
-  group_by(Class)%>%
-  summarize(mean_imp = mean(meanImp),
-            imp_sd = sd(meanImp),
-            n=n()/177,
-            linear_biomass_corr = cor(shoot_biomass, Abundance))%>%view
-
-imp_melted%>%
-  group_by(Order)%>%
-  summarize(mean_imp = mean(meanImp),
-            imp_sd = sd(meanImp),
-            n=n()/177,
-            linear_biomass_corr = cor(shoot_biomass, Abundance))%>%view
-
-           
-imp_melted%>%
-  group_by(Family)%>%
-  summarize(mean_imp = mean(meanImp),
-            imp_sd = sd(meanImp),
-            n=n()/177,
-            linear_biomass_corr = cor(shoot_biomass, Abundance))%>%view
-
-
-imp_melted%>%
-  group_by(Family)%>%
-  summarize(mean_imp = mean(meanImp),
-            imp_sd = sd(meanImp),
-            n=n()/177,
-            linear_biomass_corr = cor(shoot_biomass, Abundance))%>%dplyr::arrange(desc(n))
-
-
 
 
 ```
@@ -601,7 +584,7 @@ importance_per_taxonomy<-mapply(function(x,y)
 
 
 #export this table as txt
-capture.output(importance_per_taxonomy, file = "./Results/importance_per_taxonomy.txt")
+capture.output(importance_per_taxonomy, file = "./Results/RF_importance_per_taxonomy.txt")
 
 ```
 
@@ -616,14 +599,18 @@ capture.output(importance_per_taxonomy, file = "./Results/importance_per_taxonom
 #prepare ps object for heat tree
 CSS_BacFunBulkRhizo_ps_l<-lapply(CSS_BacFunBulkRhizo_ps_l, function(x){
   
+  # turn NA classifications into "", previewing their complete removal from the tree; 
+  x@tax_table@.Data[is.na(x@tax_table)]<-""
+  
   # let's remove the "r__"ranks from the taxonomy, they can be useful but will pollute our plot
 tax_table(x)[, colnames(tax_table(x))] <- gsub(pattern = "[a-z]__", # regular expression pattern to search for
                                                                    x = tax_table(x)[, colnames(tax_table(x))], # "df"
                                                                    replacement = "") # replacement for pattern
+
+# remove confidence of tax assingment, sp level ID
 x@tax_table<-x@tax_table[,1:6]
 return(x)
 })
-
 
 
 
@@ -631,7 +618,7 @@ return(x)
 
 
 
-## 8 -  Visualize the flower features on a heat tree 
+## 8 -  Visualize the  features on a heat tree 
 
 ```{r}
 #deine a function to put the ASV importance from boruta into a heat tree, using a phyloseq object
