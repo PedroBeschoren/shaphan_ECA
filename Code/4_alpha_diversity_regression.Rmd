@@ -55,7 +55,7 @@ rarefied_BacFun_ps_sampletype_l$Bac$bulk_soil<-subset_samples(rarefied_BacFun_ps
 
 ```
 
-
+# compare two smple types
 ```{r}
 
 
@@ -333,7 +333,7 @@ full_VS_selected_Order$uni_4model_BO_above$Observed_composted_frass / full_VS_se
 ```
 
 
-#4.13 Figures
+# Figures
 ```{r}
 
 library(gridExtra)
@@ -378,6 +378,275 @@ plot_AlphaCorr_Class <- grid.arrange(plot_l_obs_Class$bulk_soil.C,
 ggsave(plot_AlphaCorr_Class,
        height = 24, width = 36,
        file="./Results/AlphaCorr_Class.svg")
+
+
+```
+
+
+
+
+# compare an ASV subset to the full microbal community
+```{r}
+
+#load RF aSVs
+load(file = "./Data/ASV_confirmed_l.RData")
+ASV_confirmed_l
+
+
+# split bacterial dataset
+rarefied_BacFun_BulkRhizo_ps_l_l<-lapply( rarefied_BacFun_ps_l, function (x) metagMisc::phyloseq_sep_variable(x, variable = "sample_type"))
+
+# remove frass sample type from list, then flatten it
+rarefied_BacFunBulkRhizo_ps_l<-list("Bac_Bulk" = rarefied_BacFun_BulkRhizo_ps_l_l$Bac$bulk_soil,
+                                        "Bac_Rhizo" = rarefied_BacFun_BulkRhizo_ps_l_l$Bac$rhizosphere,
+                                        "Fun_Bulk" = rarefied_BacFun_BulkRhizo_ps_l_l$Fun$bulk_soil,
+                                        "Fun_Rhizo" = rarefied_BacFun_BulkRhizo_ps_l_l$Fun$rhizosphere)
+
+#create ps object that only ontains the RF important aSVs
+rarefied_BacFunBulkRhizo_RF_ASVs_ps_l<-
+mapply(function (z,y)
+  prune_taxa(taxa = z, 
+             x = y),
+  z = ASV_confirmed_l,
+  y = rarefied_BacFunBulkRhizo_ps_l)
+
+# it is a bit repetitive but I ran out of time to further automate this
+
+###########################
+####### class level ####### 
+###########################
+Boruta_RF_ASVs_Class<-lapply(rarefied_BacFunBulkRhizo_RF_ASVs_ps_l, function (x) 
+  diversity_per_taxon(ps_object = x,
+                      taxa_level = "Class",
+                      data_partition = "Boruta_RF_ASVs"))
+
+Full_community_Class<-lapply(rarefied_BacFunBulkRhizo_ps_l, function (x) 
+  diversity_per_taxon(ps_object = x,
+                      taxa_level = "Class",
+                      data_partition = "Full_community"))
+
+# join 2 dfs of step 3
+full_VS_selected_Class<-mapply(function (x,y)
+  left_join(x,
+            y,
+            by = "Class"),
+  x = Boruta_RF_ASVs_Class,
+  y = Full_community_Class,
+  SIMPLIFY = FALSE)
+
+
+
+
+
+
+###########################
+####### Order level ####### 
+###########################
+Boruta_RF_ASVs_Order<-lapply(rarefied_BacFunBulkRhizo_RF_ASVs_ps_l, function (x)
+  diversity_per_taxon(ps_object = x,
+                      taxa_level = "Order",
+                      data_partition = "Boruta_RF_ASVs"))
+
+Full_community_Order<-lapply(rarefied_BacFunBulkRhizo_ps_l, function (x)
+  diversity_per_taxon(ps_object = x,
+                      taxa_level = "Order",
+                      data_partition = "Full_community"))
+
+# join 2 dfs of step 3
+full_VS_selected_Order<-mapply(function (x,y)
+  left_join(x,
+            y,
+            by = "Order"),
+  x = Boruta_RF_ASVs_Order,
+  y = Full_community_Order,
+  SIMPLIFY = FALSE)
+
+
+
+
+
+
+###########################
+####### Family level ###### 
+###########################
+Boruta_RF_ASVs_Family<-lapply(rarefied_BacFunBulkRhizo_RF_ASVs_ps_l, function (x)
+  diversity_per_taxon(ps_object = x,
+                      taxa_level = "Family",
+                      data_partition = "Boruta_RF_ASVs"))
+
+Full_community_Family<-lapply(rarefied_BacFunBulkRhizo_ps_l, function (x)
+  diversity_per_taxon(ps_object = x,
+                      taxa_level = "Family",
+                      data_partition = "Full_community"))
+
+# join 2 dfs of step 3
+full_VS_selected_Family<-mapply(function (x,y)
+  left_join(x,
+            y,
+            by = "Family"),
+  x = Boruta_RF_ASVs_Family,
+  y = Full_community_Family,
+  SIMPLIFY = FALSE)
+
+####################################################
+####### Done! Diversity per taxon calculated ####### 
+####################################################
+
+
+# final output from divesity per taxon calculation
+full_VS_selected_Class
+full_VS_selected_Order
+full_VS_selected_Family
+
+
+# make plot - correlation between observed umber of taxa in the full data VS selected subset
+plot_observed_correlation<-function(full_VS_selected_TaxaLevel){
+untitled_plot_list<-lapply(full_VS_selected_TaxaLevel, function(z)
+ggplot(data=z,aes(x=Observed_Full_community,y=Observed_Boruta_RF_ASVs ))+
+  geom_point() +
+  theme_bw()+
+  theme(axis.title=element_text(size=11, face = "bold"))+
+  xlab(label = "Number of taxa in Full community")+
+  ylab(label = "Number of taxa in RF ASVs subset")+
+  geom_smooth(method="loess")+ #values of y are based on the values of x
+  geom_text_repel(aes(label=z[z$Observed_Boruta_RF_ASVs>10,1]), data = z[z$Observed_Boruta_RF_ASVs>10,], size = 3))
+
+tiles_list<-names(untitled_plot_list) 
+
+Plot_list<-mapply(function (x,z) # use mapply again to put those listed names in the list of plots
+  x + ggtitle(z),
+  x = untitled_plot_list,
+  z = tiles_list, 
+  SIMPLIFY = FALSE)
+return(Plot_list)
+
+}
+
+plot_l_obs_Class <- plot_observed_correlation(full_VS_selected_Class)
+plot_l_obs_Order <-plot_observed_correlation(full_VS_selected_Order)
+plot_l_obs_Family <-plot_observed_correlation(full_VS_selected_Family)
+
+
+
+
+
+plot_shannon_correlation<-function(full_VS_selected_TaxaLevel){
+untitled_plot_list<-lapply(full_VS_selected_TaxaLevel, function(z)
+ggplot(data=z[z$Shannon_Boruta_RF_ASVs>0,], #only includes shannon >0
+       aes(x=Shannon_Full_community,y=Shannon_Boruta_RF_ASVs ))+
+  geom_point() +
+   theme_bw()+
+  theme(axis.title=element_text(size=11, face = "bold"))+
+    xlab(label = "Shannon diversity in Full community")+
+  ylab(label = "Shannon diversity in RF ASVs subset")+
+  geom_smooth(method="loess")+ #values of y are based on the values of x
+    geom_text_repel(aes(label=z[z$Shannon_Boruta_RF_ASVs>0,1]), data = z[z$Shannon_Boruta_RF_ASVs>0,], size = 3))
+
+tiles_list<-names(untitled_plot_list) 
+
+Plot_list<-mapply(function (x,z) # use mapply again to put those listed names in the list of plots
+  x + ggtitle(z),
+  x = untitled_plot_list,
+  z = tiles_list, 
+  SIMPLIFY = FALSE)
+return(Plot_list)
+}
+
+plot_l_Shan_Class <- plot_shannon_correlation(full_VS_selected_Class)
+plot_l_Shan_Order <- plot_shannon_correlation(full_VS_selected_Order)
+plot_l_Shan_Family <- plot_shannon_correlation(full_VS_selected_Family)
+
+
+
+
+plot_simpson_correlation<-function(full_VS_selected_TaxaLevel){
+untitled_plot_list<-lapply(full_VS_selected_TaxaLevel, function(z)
+ggplot(data=z[z$Simpson_Boruta_RF_ASVs>0,], #only includes shannon >0
+       aes(x=Simpson_Full_community,y=Simpson_Boruta_RF_ASVs ))+
+  geom_point() +
+   theme_bw()+
+  theme(axis.title=element_text(size=11, face = "bold"))+
+  xlab(label = "Simpson diversity in Full community")+
+  ylab(label = "Simpson diversity in RF ASVs subset")+
+  geom_smooth(method="loess")+ #values of y are based on the values of x
+    geom_text_repel(aes(label=z[z$Simpson_Boruta_RF_ASVs >0,1]), data = z[z$Simpson_Boruta_RF_ASVs >0,], size = 3))
+
+tiles_list<-names(untitled_plot_list) 
+
+Plot_list<-mapply(function (x,z) # use mapply again to put those listed names in the list of plots
+  x + ggtitle(z),
+  x = untitled_plot_list,
+  z = tiles_list, 
+  SIMPLIFY = FALSE)
+return(Plot_list)
+}
+
+plot_l_Simp_Class <- plot_simpson_correlation(full_VS_selected_Class)
+plot_l_Simp_Order <- plot_simpson_correlation(full_VS_selected_Order)
+plot_l_Simp_Family <- plot_simpson_correlation(full_VS_selected_Family)
+
+
+
+#check how much$ of the taxa diversity is retained
+
+full_VS_selected_Order$uni_4model_BO_above$Observed_Boruta_RF_ASVs / full_VS_selected_Order$uni_4model_BO_above$Observed_Full_community
+
+
+# the loop for testing in each taxonomy class was not working properly, so i deleted the code for it!
+
+
+
+
+
+
+```
+
+
+# Figures
+```{r}
+
+library(gridExtra)
+
+#Family
+plot_AlphaCorr_Family <- grid.arrange(plot_l_obs_Family$Bac_Bulk, 
+                                      plot_l_Shan_Family$Bac_Bulk,
+                                      plot_l_Simp_Family$Bac_Bulk, 
+                                      plot_l_obs_Family$Bac_Rhizo, 
+                                      plot_l_Shan_Family$Bac_Rhizo, 
+                                      plot_l_Simp_Family$Bac_Rhizo, nrow=3,  ncol=3)
+
+#save plot
+ggsave(plot_AlphaCorr_Family,
+       height = 24, width = 36,
+       file="./Results/AlphaCorr_Family_RF.svg")
+
+
+#Order
+plot_AlphaCorr_Order <- grid.arrange(plot_l_obs_Order$Bac_Bulk,
+                                     plot_l_Shan_Order$Bac_Bulk,
+                                     plot_l_Simp_Order$Bac_Bulk,
+                                     plot_l_obs_Order$Bac_Rhizo,
+                                     plot_l_Shan_Order$Bac_Rhizo,
+                                     plot_l_Simp_Order$Bac_Rhizo, nrow=3,  ncol=3)
+
+#save plot
+ggsave(plot_AlphaCorr_Order,
+       height = 24, width = 36,
+       file="./Results/AlphaCorr_Order_RF.svg")
+
+
+#Class 
+plot_AlphaCorr_Class <- grid.arrange(plot_l_obs_Class$Bac_Bulk,
+                                     plot_l_Shan_Class$Bac_Bulk,
+                                     plot_l_Simp_Class$Bac_Bulk,
+                                     plot_l_obs_Class$Bac_Rhizo,
+                                     plot_l_Shan_Class$Bac_Rhizo,
+                                     plot_l_Simp_Class$Bac_Rhizo, nrow=3,  ncol=3)
+
+#save plot
+ggsave(plot_AlphaCorr_Class,
+       height = 24, width = 36,
+       file="./Results/AlphaCorr_Class_RF.svg")
 
 
 ```
