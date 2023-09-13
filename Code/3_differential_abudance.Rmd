@@ -445,6 +445,102 @@ return(output)
 
 }
 
+# define alternative function for plotting, (no key, labels on small trees):
+phyloseq_to_heat_tree2<-function(ps_object, sample_group){
+  
+  # this function output is a heat tree comparing metadata. the input is based on a phyloseq object
+  
+  # ps object =  a phyloseq object, containing sample metadata, OTU table, and taxonomy table
+  # sample_group = the name of a column in your metadata that you want to compare in the heat tree. it has to be quoted.
+  
+  # this function will create a matrix of heat trees if your metadata has more than 2 groups. it should fail if it has only 1 group
+  
+
+#remove unnecessary taxonomic info (dada2id, "s__" and "ASV_id) by updating the tax table with a subset of the tax table
+tax_table(ps_object)<-tax_table(ps_object)[,1:7]
+
+
+# let's remove the "r__"ranks from the taxonomy, they can be useful but will pollute our plot
+tax_table(ps_object)[, colnames(tax_table(ps_object))] <- gsub(pattern = "[a-z]__", # regular expression pattern to search for
+                                                                   x = tax_table(ps_object)[, colnames(tax_table(ps_object))], # "df"
+                                                                   replacement = "") # replacement for pattern
+# transform from phyloseq to taxmap object
+taxmap_obj<-parse_phyloseq(ps_object)
+
+#get abundance per taxon
+taxmap_obj$data$tax_abund<-calc_taxon_abund(obj = taxmap_obj, 
+                                      data = "otu_table",
+                                      cols = taxmap_obj$data$sample_data$sample_id) 
+
+#get occurrence of ASVs per treatment
+# the sample groups needs some wrangling to fit within the soft code of the function
+taxmap_obj$data$tax_occ<- calc_n_samples(obj = taxmap_obj, 
+                                                      data = "tax_abund", 
+                                                      cols = taxmap_obj$data$sample_data$sample_id,
+                                                      groups = taxmap_obj$data$sample_data[colnames(taxmap_obj$data$sample_data)==sample_group][[1]]) 
+
+# calculate log2 median ratios and p values for a wilcoxcon test within taxas in this stress treatment groups
+# the sample groups needs some wrangling to fit within the soft code of the function
+taxmap_obj$data$diff_table <- compare_groups(obj = taxmap_obj,
+                                                        data = "tax_abund",
+                                                        cols = taxmap_obj$data$sample_data$sample_id, 
+                                                        groups = taxmap_obj$data$sample_data[colnames(taxmap_obj$data$sample_data)==sample_group][[1]]) 
+
+# set differential log ratio to 0 based on adjusted p values
+taxmap_obj$data$diff_table$log2_median_ratio[taxmap_obj$data$diff_table$wilcox_p_value > 0.001] <- 0
+
+# define number of compared factors
+factors_compared<-taxmap_obj$data$sample_data[colnames(taxmap_obj$data$sample_data)==sample_group][[1]] 
+
+# draw the plot based on an if else statement: if there are 2 groups, plot a a heat tree comparing abundances between both groups, else plot a matrix of ehat trees. this function will fail if you only have 1 sample group! 
+
+if (length(unique(factors_compared)) == 2) {
+
+set.seed(1)
+ output<- taxmap_obj %>%
+heat_tree(
+            node_label = taxon_names,
+            node_size = n_obs,
+            node_color = log2_median_ratio,
+            node_color_interval = c(-5, 5), # The range of `log2_median_ratio` to display
+            node_color_range = c("cyan", "gray", "tan"), # The color palette used
+            layout = "davidson-harel",
+            node_color_axis_label = paste0("log2 median; tan", 
+                                           taxmap_obj$data$diff_table$treatment_1[1], 
+                                           "cyan", 
+                                           taxmap_obj$data$diff_table$treatment_2[1],
+                                           sep = " "),
+            initial_layout = "reingold-tilford")
+
+ } else {
+
+set.seed(1)
+output<-heat_tree_matrix(taxmap_obj,
+                         data = "diff_table", # this is the table with the data you want to plot
+                         node_size = n_obs, # n_obs is a function that calculates, in this case, the number of OTUs per taxon
+                         node_label = taxon_names,
+                         node_color = log2_median_ratio, # A column from `taxmap_obj$data$diff_table_3treatments`
+                         node_color_range = diverging_palette(), # The built-in palette for diverging data
+                         key_size = 0,
+                         label_small_trees = TRUE,
+                         node_color_interval = c(-5, 5), # The range of `log2_median_ratio` to display
+                         edge_color_interval = c(-5, 5), # The range of `log2_median_ratio` to display
+                         node_size_axis_label = "Number of OTUs",
+                         node_color_axis_label = "Log2 ratio median proportions",
+                         layout = "davidson-harel", # The primary layout algorithm
+                         initial_layout = "reingold-tilford") # The layout algorithm that initializes node locations
+
+   
+   
+ }
+
+
+# clearly define the output object you will get from the function
+return(output)   
+
+
+}
+
 
 ```
 
@@ -999,7 +1095,40 @@ ggsave(heat_tree_pannel_dose, filename = "./Results/heattree_BacFun_Dose_025.pdf
 
 
 
+#alternatively, the plot above wihtout key and with labels on small trees
 
+# plot 4 matrixes of trees
+heat_tree_l_l2<-mapply(function(ps_obj, ASV_l){
+  
+        heat_tree_dose<-phyloseq_to_heat_tree2(ps_object = prune_taxa(taxa = ASV_l%>%unlist%>%unique(), x = ps_obj),
+                                           sample_group = "frass_dose")
+
+      
+      output<-heat_tree_dose 
+  return(output)
+  
+},
+  ps_obj = rarefied_BacFunBulkRhizo_ps_l,
+  ASV_l = differentialy_abundant_ASVs_l_l,
+  SIMPLIFY = FALSE)
+heat_tree_l_l$Bac_Bulk
+
+# arrange the pltos in a 6-pannel for bacteria
+heat_tree_pannel_dose2<-  
+ggarrange(plotlist = heat_tree_l_l2,
+          ncol =2, 
+          nrow = 2,
+          labels = c("Bacteria, bulk, dose",
+                     "Bacteria, rhizo, dose",
+                     "Fungi, bulk, dose",
+                     "Fungi, rhizo, dose"))
+
+
+# export the pannels as pdf
+ggsave(heat_tree_pannel_dose, filename = "./Results/heattree_BacFun_Dose_025.pdf",
+       width = 40,
+       height = 40,
+       units = "cm")
 
 
 
@@ -1012,7 +1141,7 @@ ggsave(heat_tree_pannel_dose, filename = "./Results/heattree_BacFun_Dose_025.pdf
 
 
 
-# 999 - Compare No-Frass treatment to source X and Y (good fungi)
+# Compare No-Frass treatment to source X and Y (good fungi)
 For Bacteria, compare N to frass treamment 2 and 5 (the factors that better seaprate it in the NMDS)
 For Fungi, compare to frass source X and Y  (the factors that better seaprate it in the NMDS)
 
@@ -1423,7 +1552,237 @@ ggsave(heat_tree_pannel_dose, filename = "./Results/heattree_BacFun_source_NXY.p
 
 
 
-ignoge this chunk... it will generate a very in-depth series of hierarchichal trees to explore individual effects. it's too much details that we don't need!
+# Compare No-Frass treatment to all others
+
+
+NOTE: THIS CODE WILL OVEWRITE PREVIOUS OBJECTS, PROCEED WITH CARE!
+```{r}
+
+
+
+# split bacterial dataset
+unnormalized_BacFun_BulkRhizo_ps_l_l<-lapply( unnormalized_BacFun_ps_l, function (x) metagMisc::phyloseq_sep_variable(x, variable = "sample_type"))
+
+# remove frass sample type from list, then flatten it
+unnormalized_BacFunBulkRhizo_ps_l<-list("Bac_Bulk" = unnormalized_BacFun_BulkRhizo_ps_l_l$Bac$bulk_soil,
+                                        "Bac_Rhizo" = unnormalized_BacFun_BulkRhizo_ps_l_l$Bac$rhizosphere,
+                                        "Fun_Bulk" = unnormalized_BacFun_BulkRhizo_ps_l_l$Fun$bulk_soil,
+                                        "Fun_Rhizo" = unnormalized_BacFun_BulkRhizo_ps_l_l$Fun$rhizosphere)
+
+
+
+
+
+```
+
+
+
+
+## 4 - create deseq object - 16S
+```{r}
+
+# make list of deseqed phyloseq objects ; crossing  model of 3 factors
+deseq_3add_l <- lapply (unnormalized_BacFunBulkRhizo_ps_l, function (x)
+  phyloseq_to_deseq2(x, ~ amendment))
+
+deseq_3add_l <- lapply (deseq_3add_l, function (x) 
+  DESeq(x, test="Wald", fitType="parametric"))
+
+# this unlisted, unsplit deseq2 object will be necessary to construct the heatmap
+ps_deseq_bac <- phyloseq_to_deseq2(unnormalized_BacFun_ps_l$Bac, ~ amendment)
+ps_deseq_bac <- DESeq(ps_deseq_bac, test="Wald", fitType="parametric")
+
+ps_deseq_fun <- phyloseq_to_deseq2(unnormalized_BacFun_ps_l$Fun, ~ amendment)
+ps_deseq_fun <- DESeq(ps_deseq_fun, test="Wald", fitType="parametric")
+
+
+```
+
+
+## 5 - define constract vecotrs
+this sets ths pairwise comparisons you wnt to make
+
+```{r}
+
+# make a list of the pairwise comparisons you want to run according the treatment ; 
+#  positive fold change: higher in fist factor (treatment) / negative fold change: higher in second factor(control)
+pairwise_comparison<-list(c("amendment", "no_frass", "frass") )
+
+```
+
+
+
+
+```{r}
+# this function will build the significance table for each list, and has to be run once for each pairwise comparison 
+
+
+build_sig_tab<-function (deseq_obj, contrast_cha_vector, unsplit_ps, p_adjust_alpha, min_log_fold){
+
+ # alpha<-p_adjust_alpha # defines the alpha level for p adjustment to control for false discovery rate
+  #min_fold<-min_log_fold # defines minimum fold difference in counts to classify an OTU as differential
+
+
+  list_res <- lapply(contrast_cha_vector, function(x) 
+    results(deseq_obj, contrast=x, cooksCutoff = FALSE))
+
+
+  list_sigtab <- lapply(list_res, function (x) 
+    x[which(x$padj < p_adjust_alpha), ]) # cuts results based on p_adjust_alpha for FDR
+  
+   list_sigtab <- lapply(list_sigtab, function (x) 
+    x[which(abs(x$log2FoldChange) > min_log_fold), ]) # cuts results based on minimum fold change
+   
+  list_sigtab <- lapply(list_sigtab, function (x) 
+    x[order(x$padj),])  # sorts lists of OTUs based on p values of pairwise abundance differences
+  
+  
+  
+  
+  
+  
+  # this silenced chuck allows you to limit the number of OTUs accepted as diferential in each comparision. note that if you define the minimum number as 1:40 (1 to 40) but you only hace 39 differentially abundannt OTUs the function will crash and you will not have these results. just remove the hashtags below to limt to 3 top differentially abundant OTUs
+  
+    # max_OTU_n<-1:3 # defines the maximum number of OTUs to include in each pairwise coparison
+    # list_sigtab <- lapply(list_sigtab, function (x) 
+    # x[max_OTU_n,])  # cuts results based on maximum numer of OTUs counted as differential
+  
+  
+  
+  
+  
+  
+    
+  list_sigtab <- lapply(list_sigtab, function (x) 
+    cbind(as(x, "data.frame"), as(tax_table(unsplit_ps)[rownames(x), ], "matrix"))) # here we only colect the taxa names from the original, unsplit, phyloseq object
+  return(list_sigtab)
+  }
+
+
+#before we run this custom fucntion, I must make an unsplit ps object as a list of 4 objects to match in the mapply. it's not good practices, but it will suffice for now
+unsplit_ps_x4_l<-list("unsplit_bac1" = unnormalized_BacFun_ps_l$Bac,
+                     "unsplit_bac2" = unnormalized_BacFun_ps_l$Bac,
+                     "unsplit_fun1" = unnormalized_BacFun_ps_l$Fun,
+                     "unsplit_fun2" = unnormalized_BacFun_ps_l$Fun)
+
+
+# run the cusotm function on 2 lists of size 4. p value for bac msut be lower than for fungi
+sigtab_results_l<-list()
+sigtab_results_l[1:2]<-mapply(function (deseq_l, ps_l)
+                    build_sig_tab(deseq_obj = deseq_l,
+                                  contrast_cha_vector = pairwise_comparison,
+                                  unsplit_ps = ps_l,
+                                  p_adjust_alpha = 0.0000000001,
+                                  min_log_fold = 2),
+                         deseq_l = deseq_3add_l[1:2],
+                         ps_l = unsplit_ps_x4_l[1:2],
+                    SIMPLIFY = FALSE)
+
+sigtab_results_l[3:4]<-mapply(function (deseq_l, ps_l)
+                    build_sig_tab(deseq_obj = deseq_l,
+                                  contrast_cha_vector = pairwise_comparison,
+                                  unsplit_ps = ps_l,
+                                  p_adjust_alpha = 0.000001,
+                                  min_log_fold = 2),
+                         deseq_l = deseq_3add_l[3:4],
+                         ps_l = unsplit_ps_x4_l[3:4],
+                    SIMPLIFY = FALSE)
+                        
+#adjsut anmes 
+ names(sigtab_results_l)<-names(deseq_3add_l)                    
+
+
+```
+
+
+```{r}
+
+# extract ASV names of the differentially abundant ASVs
+differentialy_abundant_ASVs_l_l<-lapply(sigtab_results_l, function (x) 
+  lapply(x, function (y) rownames(y))) # extract the rownames from the list, then....
+
+# adjsut names of lists
+names(differentialy_abundant_ASVs_l_l)<-names(deseq_3add_l)
+
+
+
+
+# extract ASV names of the differentially abundant ASVs
+differentialy_abundant_ASVs_l<-lapply(sigtab_results_l, function (x) 
+  lapply(x, function (y) rownames(y))) # extract the rownames from the list, then....
+differentialy_abundant_ASVs_l<-lapply(differentialy_abundant_ASVs_l, function (x)
+unlist(x))%>% # flatten the rowname (OTU ID) list, ignoring the names of the lists, then...
+  unique() # remove duplications of the same OTUs
+
+# adjsut names of lists
+names(differentialy_abundant_ASVs_l)<-names(deseq_3add_l)
+
+
+
+# extract Orders from teh sigtabs, showing how often an order is represented
+Order_representation_l<-lapply(sigtab_results_l, function(y)
+  lapply(y, function (x) x$Order)%>% # extract the rownames from the list, then....
+unlist(use.names=FALSE)%>% # flatten the rowname (OTU ID) list, ignoring the names of the lists, then...
+  table()%>% # put it on a table, showing ORders that are more often represented
+sort(decreasing = TRUE))# sort that table
+
+
+
+
+
+
+```
+#### ploting A - bi-plot heatmaps
+A heatmap like this is a convinient way to represent the key differences across OTUs and treatments
+
+note that on this heatmap, all comparisons are made against the control. you will need to change the contrasts to make, for example, a 1.0 Meja - 0.1MeJA comparison
+```{r}
+
+
+
+# if you are dealing with too many samples and it's difficult to read, plot one list element at a time with this function:
+heatmap_l<-mapply (function(list_deseq_objects, list_ps_objects, select_listed, top_taxa) {
+
+ntb <- normTransform(list_deseq_objects) # defaults to log2(x+1)
+differential_OTUs_in_deseq_list_element <- select_listed[which(select_listed%in%row.names(assay(ntb)))]# subsets selection of differentially abundandt OTUs so that only those represented in the deseq2 list portion are present
+log2.norm.countsb <- assay(ntb)[differential_OTUs_in_deseq_list_element, ] #these colnames should match rownames(df)
+df <- as.data.frame(colData(list_deseq_objects)[,c("frass_dose","frass_source",  "frass_treatment")])
+row.names(df)<-row.names(as.data.frame(colData(list_deseq_objects)))
+df_row <- as.data.frame((tax_table(list_ps_objects))[,c("Order")])
+# this chnk of code lets us remove some families form the legend
+df_row$main_Orders<-df_row$Order %in%  names(top_taxa)[1:8]  # define if the order  is on this list of orders
+df_row<-mutate(df_row, main_order = if_else(main_Orders=="TRUE", df_row$Order, "Other" ))%>% # make new variable: if the family is on the lsit of families, add it to the new variale, if not wirte is as "Other"
+   select(main_order) 
+pheatmap::pheatmap(log2.norm.countsb, color=viridis(24), annotation_col=df, annotation_row=df_row, main="log2(counts + 1)", 
+                   scale="none", fontsize_row = 3, fontsize_col = 8)
+
+},
+  list_deseq_objects = deseq_3add_l,
+  select_listed = differentialy_abundant_ASVs_l,
+  list_ps_objects = unsplit_ps_x4_l,
+  top_taxa = Order_representation_l,
+  SIMPLIFY = FALSE)
+
+#save pltos externally
+ggsave(filename = "./Results/heatmap_frass_NoFrass_Bac_Bulk.pdf",
+       plot = heatmap_l$Bac_Bulk)
+ggsave(filename = "./Results/heatmap_frass_NoFrass_Bac_Rhizo.pdf",
+       plot = heatmap_l$Bac_Rhizo)
+
+ggsave(filename = "./Results/heatmap_frass_NoFrass_Fun_Bulk.pdf",
+       plot = heatmap_l$Fun_Bulk)
+ggsave(filename = "./Results/heatmap_frass_NoFrass_Fun_Rhizo.pdf",
+       plot = heatmap_l$Fun_Rhizo)
+
+
+```
+
+
+
+
+#### ploting B - metacoder heat trees
+
+##### 8 - prepare a rerefied ps object for metacoder trees
 ```{r}
 
 #laod rarefied data and remove N and rass samples
@@ -1436,34 +1795,22 @@ rarefied_BacFun_ps_l<-lapply(rarefied_BacFun_ps_l, function (x)
 # remove frass sample type from list
 rarefied_BacFun_ps_l<-lapply(rarefied_BacFun_ps_l, function (x) x[c(1,3)])
 
-# remove frass source N from samples
-rarefied_BacFun_ps_l<-lapply(rarefied_BacFun_ps_l, function(y)
-  lapply(y, function(x){
-  x<-subset_samples(x, frass_source != "N") # from frass source N
-  x<-prune_taxa(taxa_sums(otu_table(x)) > 0, x) # remove ASVs with zero counts (that is, ASVS that only show up on frass source N)
-return(x)
-}))
-
-
 # remove frass sample type from list, then flatten it
 rarefied_BacFunBulkRhizo_ps_l<-list("Bac_Bulk" = rarefied_BacFun_ps_l$Bac$bulk_soil,
                                         "Bac_Rhizo" = rarefied_BacFun_ps_l$Bac$rhizosphere,
                                         "Fun_Bulk" = rarefied_BacFun_ps_l$Fun$bulk_soil,
                                         "Fun_Rhizo" = rarefied_BacFun_ps_l$Fun$rhizosphere)
 
-# make a ps objec that only has differentially abundant taxa
-diffAbund_ps_l<-mapply(function (x,y)
-  prune_taxa(x, y),
-x = differentialy_abundant_ASVs_l,
-y = rarefied_BacFunBulkRhizo_ps_l,
-SIMPLIFY = FALSE)
 
 
 #exchange species info per ASV ID
-diffAbund_ps_l<-lapply(diffAbund_ps_l, function(x)
-  x@tax_table[,7]<-taxa_names(x))
+rarefied_BacFunBulkRhizo_ps_l<-lapply(rarefied_BacFunBulkRhizo_ps_l, function(x){
+x@tax_table[,7]<-taxa_names(x)
+return(x)
+})
 
-#define a function that takes a phyloseq object and returns heat trees
+#define function for plotting
+
 phyloseq_to_heat_tree<-function(ps_object, sample_group){
   
   # this function output is a heat tree comparing metadata. the input is based on a phyloseq object
@@ -1475,7 +1822,7 @@ phyloseq_to_heat_tree<-function(ps_object, sample_group){
   
 
 #remove unnecessary taxonomic info (dada2id, "s__" and "ASV_id) by updating the tax table with a subset of the tax table
-tax_table(ps_object)<-tax_table(ps_object)[,1:7]
+tax_table(ps_object)<-tax_table(ps_object)[,1:6]
 
 
 # let's remove the "r__"ranks from the taxonomy, they can be useful but will pollute our plot
@@ -1520,7 +1867,7 @@ heat_tree(
             node_label = taxon_names,
             node_size = n_obs,
             node_color = log2_median_ratio,
-            node_color_interval = c(-5, 5), # The range of `log2_median_ratio` to display
+           # node_color_interval = c(-5, 5), # The range of `log2_median_ratio` to display
             node_color_range = c("cyan", "gray", "tan"), # The color palette used
             layout = "davidson-harel",
             node_color_axis_label = paste0("log2 median; tan", 
@@ -1557,47 +1904,55 @@ return(output)
 
 }
 
-#calculate and plto heat tree
-heatree_treatment_l<-lapply(diffAbund_ps_l, function(x)
-  phyloseq_to_heat_tree(ps_object = x, sample_group = "frass_treatment"))
 
-#spllit ps per treatment, then build new trees
-diffAbund_frass_treatment_ps_l_l<-lapply(diffAbund_ps_l, function (x)
-  metagMisc::phyloseq_sep_variable(x, variable = "frass_treatment"))
+```
 
-heatree_treatment_frasssource_l_l<-lapply(diffAbund_frass_treatment_ps_l_l, function(x)
-  lapply(x, function(y)
-  phyloseq_to_heat_tree(ps_object = y, sample_group = "frass_source")))
+#####  9 - soft-code heat trees 4-ploting 
+```{r}
 
-# split the splited list, then build more trees... this gives us some hierarchichal trees...
+# plot 4 matrixes of trees
+heat_tree_l_l<-mapply(function(ps_obj, ASV_l){
+  
+        heat_tree_dose<-phyloseq_to_heat_tree(ps_object = prune_taxa(taxa = ASV_l%>%unlist%>%unique(), x = ps_obj),
+                                           sample_group = "amendment")
 
-diffAbund_frass_treatment_source_ps_l_l_l<-lapply(diffAbund_frass_treatment_ps_l_l, function (x)
-  lapply(x, function(y)
-  metagMisc::phyloseq_sep_variable(y, variable = "frass_source")))
+      
+      output<-heat_tree_dose 
+  return(output)
+  
+},
+  ps_obj = rarefied_BacFunBulkRhizo_ps_l,
+  ASV_l = differentialy_abundant_ASVs_l_l,
+  SIMPLIFY = FALSE)
 
-heattree_frass_treatmentsroucedose_ps_l_l_l<-lapply(diffAbund_frass_treatment_source_ps_l_l_l, function(x)
-  lapply(x, function(y)
-    lapply(y, function(z)
-  phyloseq_to_heat_tree(ps_object = z, sample_group = "frass_dose"))))
+# arrange the pltos in a 6-pannel for bacteria
+heat_tree_pannel_noFrass<- 
+ggarrange(heat_tree_l_l$Bac_Bulk,
+          heat_tree_l_l$Bac_Rhizo,
+          heat_tree_l_l$Fun_Bulk,
+          heat_tree_l_l$Fun_Rhizo,
+          ncol =2, 
+          nrow = 2,
+          labels = c("Bacteria, bulk, no frass VS all frass",
+                     "Bacteria, rhizo, no frass VS all frass",
+                     "Fungi, bulk, no frass VS all frass",
+                     "Fungi, rhizo, no frass VS all frass"))
 
-ggsave(ggarrange(heatree_treatment_l$Bac_Bulk,
-                heatree_treatment_frasssource_l_l$Bac_Bulk$C,
-                heattree_frass_treatmentsroucedose_ps_l_l_l$Bac_Bulk$C$X,
-                heattree_frass_treatmentsroucedose_ps_l_l_l$Bac_Bulk$C$Y,
-                heatree_treatment_frasssource_l_l$Bac_Bulk$U,
-                heattree_frass_treatmentsroucedose_ps_l_l_l$Bac_Bulk$U$X,
-                heattree_frass_treatmentsroucedose_ps_l_l_l$Bac_Bulk$U$Y,
-                labels = c("treatment", 
-                           "composted_XY", 
-                           "composted_X_25",
-                           "composted_Y_25",
-                           "uncomposted_XY", 
-                           "uncomposted_X_25",
-                           "uncomposted_Y_25")), filename = "./Results/tree_dose_bulk_hierc_tst.pdf",
-       width = 30,
-       height = 30,
+
+# export the pannels as pdf
+ggsave(heat_tree_pannel_dose, filename = "./Results/heattree_BacFun_nofrass_VS_allfrass.pdf",
+       width = 40,
+       height = 40,
        units = "cm")
 
 
+
+
+
+
+
 ```
+
+
+
 
