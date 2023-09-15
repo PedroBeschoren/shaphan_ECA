@@ -341,12 +341,6 @@ replicated_model4<-replicate(10, fix_split_train(boruta_output_l = Boruta_BacFun
 save(replicated_model4, file = "./Data/replicated_model4.RData")
 
 
-set.seed(443332)
-replicated_model5<-replicate(10, fix_split_train(boruta_output_l = Boruta_BacFun_Biomass,
-                                                ps_object_l = CSS_BacFunBulkRhizo_ps_l,
-                                                variable_to_be_classified ="shoot_biomass" ))
-save(replicated_model5, file = "./Data/replicated_model5.RData")
-
 
 ```
 
@@ -358,21 +352,21 @@ load( file = "./Data/replicated_model.RData")
 load( file = "./Data/replicated_model2.RData")
 load( file = "./Data/replicated_model3.RData")
 load( file = "./Data/replicated_model4.RData")
-load( file = "./Data/replicated_model5.RData")
+
 
 # concatenate train and test lists  
 replicated_model_train_test_l<-c(replicated_model[1,], 
                                  replicated_model2[1,], 
                                  replicated_model3[1,],
-                                 replicated_model4[1,],
-                                 replicated_model5[1,])
+                                 replicated_model4[1,])
+                           
 
 # concatenate repeated cross validation results
 replicated_model_boruta_feature_rf_repeatedcv <-c(replicated_model[2,], 
                                                   replicated_model2[2,], 
                                                   replicated_model3[2,],
-                                                  replicated_model4[2,],
-                                                  replicated_model5[2,])
+                                                  replicated_model4[2,])
+                                   
 
 
 ```
@@ -405,8 +399,6 @@ ggplot(
 
 
 
-replicated_model[2,1]$boruta_feature_rf_repeatedcv$Bac_Bulk$finalModel$forest$bestvar
-  
 ```
 
 # calculate R2 and RSME agaisnt test set
@@ -488,6 +480,7 @@ r2_RF<-ggplot(R2_RMSE_df, aes(x = Kingdom, y = R2, fill = Compartment ))+
            subtitle = "based on ASVs set as important by Boruta" )
 
 # test effect of compartment and kingdom on R2 for the model
+aov_R2<-
 summary(aov(R2 ~ Compartment*Kingdom, data = R2_RMSE_df))
 
 
@@ -503,6 +496,7 @@ RMSE_RF<-ggplot(R2_RMSE_df, aes(x = Kingdom, y = RMSE, fill = Compartment ))+
            subtitle = "based on ASVs set as important by Boruta" )
 
 # test effect of compartment and kingdom on RMSE for the model
+aov_RMSE<-
 summary(aov(RMSE ~ Compartment*Kingdom, data = R2_RMSE_df))
 
 
@@ -513,6 +507,10 @@ ggsave(filename = "./Results/RF_10models_R2_RMSE_IncludesNoFrass.pdf",
        height = 30,
        units = "cm")
 
+# save and export anova of Rs and RMSE
+anova_outputs<-c(aov_R2,aov_RMSE)
+names(anova_outputs)<-c("aov_R2","aov_RMSE")
+capture.output(anova_outputs, file = "./Results/RF_R2_RMSE_test_anova.txt")
 
 
 ```
