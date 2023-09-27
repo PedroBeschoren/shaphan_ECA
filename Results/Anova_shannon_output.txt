@@ -52,3 +52,65 @@ frass_treatment:frass_dose:frass_source   1  0.011   0.011   0.127  0.722
 Residuals                               149 13.287   0.089                   
 ---
 Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+
+
+#####################################################################
+# MODELS INCLUDING "N" AS A TREATMENT AS REQUESTED ON 27/SEPT/2023 ##
+#####################################################################
+
+> anova_shannon
+$Bac
+$Bac$bulk_soil
+                                         Df Sum Sq Mean Sq F value   Pr(>F)    
+frass_source                              2  0.123  0.0613   2.039   0.1333    
+frass_treatment                           1  0.124  0.1237   4.115   0.0441 *  
+frass_dose                                1  1.565  1.5650  52.051 1.77e-11 ***
+frass_source:frass_treatment              1  0.029  0.0285   0.948   0.3316    
+frass_source:frass_dose                   1  0.147  0.1469   4.885   0.0284 *  
+frass_treatment:frass_dose                1  0.117  0.1170   3.891   0.0502 .  
+frass_source:frass_treatment:frass_dose   1  0.116  0.1158   3.850   0.0514 .  
+Residuals                               168  5.051  0.0301                     
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+$Bac$rhizosphere
+                                         Df Sum Sq Mean Sq F value  Pr(>F)    
+frass_source                              2  4.904  2.4518  53.856 < 2e-16 ***
+frass_treatment                           1  0.000  0.0002   0.004 0.94908    
+frass_dose                                1  0.503  0.5030  11.049 0.00109 ** 
+frass_source:frass_treatment              1  0.437  0.4369   9.596 0.00229 ** 
+frass_source:frass_dose                   1  0.000  0.0001   0.001 0.97155    
+frass_treatment:frass_dose                1  0.103  0.1030   2.262 0.13444    
+frass_source:frass_treatment:frass_dose   1  0.012  0.0125   0.274 0.60160    
+Residuals                               168  7.648  0.0455                    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+
+$Fun
+$Fun$bulk_soil
+                                         Df Sum Sq Mean Sq F value   Pr(>F)    
+frass_source                              2  17.31   8.654  30.708 6.13e-12 ***
+frass_treatment                           1   0.03   0.033   0.116  0.73441    
+frass_dose                                1   1.28   1.282   4.548  0.03454 *  
+frass_source:frass_treatment              1   2.35   2.354   8.355  0.00441 ** 
+frass_source:frass_dose                   1   0.91   0.913   3.240  0.07382 .  
+frass_treatment:frass_dose                1   0.53   0.530   1.882  0.17211    
+frass_source:frass_treatment:frass_dose   1   0.08   0.082   0.292  0.58946    
+Residuals                               153  43.12   0.282                     
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+$Fun$rhizosphere
+                                         Df Sum Sq Mean Sq F value   Pr(>F)    
+frass_source                              2  2.168   1.084   6.538  0.00185 ** 
+frass_treatment                           1  8.433   8.433  50.859 2.96e-11 ***
+frass_dose                                1  0.009   0.009   0.053  0.81856    
+frass_source:frass_treatment              1  0.009   0.009   0.057  0.81129    
+frass_source:frass_dose                   1  0.002   0.002   0.009  0.92368    
+frass_treatment:frass_dose                1  0.007   0.007   0.043  0.83656    
+frass_source:frass_treatment:frass_dose   1  0.011   0.011   0.068  0.79434    
+Residuals                               165 27.360   0.166                     
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
