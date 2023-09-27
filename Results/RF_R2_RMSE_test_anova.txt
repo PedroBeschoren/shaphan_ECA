@@ -1,0 +1,18 @@
+$aov_R2
+                     Df  Sum Sq Mean Sq  F value    Pr(>F)    
+Compartment           1 0.05245 0.05245   7.5473  0.006718 ** 
+Kingdom               1 1.78479 1.78479 256.8042 < 2.2e-16 ***
+Compartment:Kingdom   1 0.02120 0.02120   3.0509  0.082660 .  
+Residuals           156 1.08420 0.00695                       
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+$aov_RMSE
+                     Df   Sum Sq  Mean Sq  F value  Pr(>F)    
+Compartment           1 0.001636 0.001636   5.0846 0.02553 *  
+Kingdom               1 0.056301 0.056301 174.9908 < 2e-16 ***
+Compartment:Kingdom   1 0.000911 0.000911   2.8318 0.09442 .  
+Residuals           156 0.050191 0.000322                     
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+

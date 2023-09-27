@@ -452,6 +452,11 @@ ggsave(filename = "./Results/alpha_div_BacFun_BulkRhizo.pdf",
 we have to separate rhizosphere from bulk soil as their homogeneity of varainces are quite different
 ```{r}
 
+# remove conditions that make an anova model complicated, but keep N control
+calculated_diversity_filtred_df_l<-lapply(calculated_diversity_df_l, function (x)
+ dplyr::filter(x, sample_type !="frass"))
+
+
 # for anova models, it's best to separate sample types as they have different variaances
 calculated_diversity_filtred_df_l_l<-lapply(calculated_diversity_filtred_df_l, function(x)
   base::split(x, f = x$sample_type))
