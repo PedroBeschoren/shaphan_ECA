@@ -24,17 +24,11 @@ library(EcolUtils)
 library(microbiome)
 library(car)
 library(agricolae)
-library(metagMisc)
+library(metagMisc) #failing
 library(ggpubr)
 library(purrr)
 library(EcolUtils)
 library(ggrepel)
-
-
-# increases memory limit used by R. 
-# NOTE: This works on R 4.1.2 but not on R 4.2.2. if memory limits become a problem in R 4.2.2, figure a way to increase maximum memory usage
-memory.limit(size = 350000)
-
 
 
 #load the phyloseq objects containing all microbiome data
