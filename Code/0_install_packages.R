@@ -4,7 +4,6 @@
 BiocManager::install("devtools")
 
 library("BiocManager")
-library("devtools")
 library("vegan")
 library("locfit")
 
@@ -30,15 +29,12 @@ renv::restore(packages = c( "metagenomeSeq",
                             "vegan"))
 
 # install packages separated
+BiocManager::install("metagenomeSeq")
 BiocManager::install("phyloseq")
 BiocManager::install("vegan")
 BiocManager::install("EcolUtils") # failed
 BiocManager::install("microbiome")
 BiocManager::install("metagMisc") # failed
-devtools::install("metagMisc") # failed
-devtools::install_github("vmikk/metagMisc")
-devtools::install_github("GuillemSalazar/EcolUtils")
-BiocManager::install("metagenomeSeq")
 BiocManager::install("DESeq2")
 BiocManager::install("locfit")
 BiocManager::install("DelayedArray")
@@ -56,4 +52,6 @@ renv::snapshot()
 renv::status()
 
 
-
+#pallete
+frass_source_y<-"#3b76c5"
+frass_source_x<-"#e68613"
