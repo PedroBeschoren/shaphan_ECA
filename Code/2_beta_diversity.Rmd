@@ -193,7 +193,8 @@ NMDS_calculation_l <- function(physeq_l, ordination_output) {
       labs(subtitle = paste("Stress", round(y$stress, digits=4))) +
       theme(plot.title = element_text(size = 10, face = "bold")) + # extarcts on where this is Bac or Fun, add to plot title
       theme(legend.position="right")+
-      labs(col="Frass source", shape="Frass treatment and dose"),
+      labs(color="Frass source", 
+           shape="Frass treatment and dose"),
     x = physeq_l,
     y = ordination_output,
     SIMPLIFY = FALSE)
@@ -202,8 +203,7 @@ NMDS_calculation_l <- function(physeq_l, ordination_output) {
   
   # adds firt taxonomic rank of first ps object as part of the tittle (Bac or Fun)
   titles_l <- paste(names(physeq_l), unique(as.character(physeq_l[[1]]@tax_table[,1])))
-  
-  
+
   
   Plot_l<- mapply(function (z,w)
     z + ggtitle(w),
@@ -219,8 +219,19 @@ NMDS_calculation_l <- function(physeq_l, ordination_output) {
 NMDS_Bac_l<-NMDS_calculation_l(physeq_l = CSS_bacfun_ps_sampletype_l$Bac[c(1,3)], 
                                ordination_output = NMDS_BacFun_l$Bac )
 
+NMDS_Bac_l$rhizosphere<-NMDS_Bac_l$rhizosphere+
+  ggtitle("Rhizosphere bacteria")
+NMDS_Bac_l$bulk_soil<-NMDS_Bac_l$bulk_soil+
+  ggtitle("Bulk soil bacteria")
+
+
 NMDS_Fun_l<-NMDS_calculation_l(physeq_l = CSS_bacfun_ps_sampletype_l$Fun[c(1,3)], 
                                ordination_output = NMDS_BacFun_l$Fun )
+
+NMDS_Fun_l$rhizosphere<-NMDS_Fun_l$rhizosphere+ 
+  ggtitle("Rhizosphere fungi")
+NMDS_Fun_l$bulk_soil<-NMDS_Fun_l$bulk_soil+
+  ggtitle("Bulk soil fungi")
 
 # arrange all 3 plots in a pannel
 NMDS_l<-ggarrange(NMDS_Bac_l$bulk_soil,
@@ -228,6 +239,7 @@ NMDS_l<-ggarrange(NMDS_Bac_l$bulk_soil,
                       NMDS_Fun_l$bulk_soil,
                       NMDS_Fun_l$rhizosphere,
                   labels = "AUTO",
+                  common.legend = TRUE,
                   ncol =2,
                   nrow = 2,
                       legend = "top")
