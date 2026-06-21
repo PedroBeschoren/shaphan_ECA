@@ -29,6 +29,7 @@ library(ggpubr)
 library(purrr)
 library(EcolUtils)
 library(ggrepel)
+library(stringr)
 
 
 #load the phyloseq objects containing all microbiome data
@@ -136,12 +137,14 @@ NMDS_Fun_l<-NMDS_calculation_l(physeq_l = CSS_bacfun_ps_sampletype_l$Fun,
 # arrange all 3 plots in a pannel
 NMDS_Bac_l<-ggarrange(NMDS_Bac_l$bulk_soil,
                         NMDS_Bac_l$rhizosphere,
-                        NMDS_Bac_l$frass, common.legend = TRUE,
+                        NMDS_Bac_l$frass, 
+                      common.legend = TRUE,
                           legend = "top")
 
 NMDS_Fun_l<-ggarrange(NMDS_Fun_l$bulk_soil,
                         NMDS_Fun_l$rhizosphere,
-                        NMDS_Fun_l$frass, common.legend = TRUE,
+                        NMDS_Fun_l$frass, 
+                      common.legend = TRUE,
                           legend = "top")
 
 #export plot
@@ -429,6 +432,22 @@ library("car")
 
 load(file = "./Data/rarefied_BacFun_ps_l.RData")
 
+# rename no frass condition
+rarefied_BacFun_ps_l<-lapply(rarefied_BacFun_ps_l, function(y){
+  
+    sample_data(y)$frass_source <- gsub(pattern = "N", replacement = "NoFrass", x = sample_data(y)$frass_source)
+    
+    sample_data(y)$frass_treatment_and_dose <- gsub(pattern = "N_0", replacement = "NoFrass", x = sample_data(y)$frass_treatment_and_dose)
+    
+    sample_data(y)$frass_treatment_and_dose <- gsub(pattern = "_", replacement = "", x = sample_data(y)$frass_treatment_and_dose)
+    
+    sample_data(y)$frass_treatment_and_dose <- factor(x = sample_data(y)$frass_treatment_and_dose,
+                                                      levels = c("C2", "U2", "C5", "U5", "NoFrass"))
+    
+return(y)
+})
+
+
 #Calculate richness for root and soil
 calculated_diversity_l<-lapply(rarefied_BacFun_ps_l, function (x){
   df<-estimate_richness(x, measures = c("Observed", "Chao1", "Shannon", "Simpson"))
@@ -454,17 +473,29 @@ calculated_diversity_df_l<-mapply(function (x,y)
 #Lets see this on a simple boxplot for Shannon diversity index
 alpha_plot_nofrass<-lapply(calculated_diversity_df_l, function (x)
   ggplot(dplyr::filter(x, sample_type !="frass"), 
-         aes( x =frass_treatment_and_dose, y = Shannon, fill =frass_source, color = frass_source, alpha = 0.5  ))+
-  geom_violin(aes(alpha = 0.2))+
+         aes( x = frass_treatment_and_dose, 
+              y = Shannon,
+              fill =frass_source, 
+              color = frass_source))+
   geom_dotplot(binaxis = "y", 
                stackdir = "center",
                position = "dodge",
-               binwidth = 0.04, 
-               aes( x =frass_treatment_and_dose))+
+               dotsize = 0.4, 
+               aes( x = frass_treatment_and_dose))+
+      geom_violin(alpha = 0.2)+
   theme_bw()+
-  scale_y_continuous(expand = c(0, 0), limits = c(0, NA))+
-  facet_wrap(~ sample_type )+
-  labs(title = paste("Shannon diversity indexes")))
+  facet_wrap(~ sample_type,
+             labeller = as_labeller(function(x) str_to_title(str_replace_all(x, "bulk_soil", "Bulk Soil"))))+
+  labs(title = "Shannon diversity indexes",
+       color="Frass source",
+       fill ="Frass source",
+       alpha = NULL,
+       x = "Frass treatment and dose",
+       y = "Shannon diversity index"))
+
+
+alpha_plot_nofrass
+
 
 # add kingdom as subtitles
 alpha_plot_nofrass$Bac<-alpha_plot_nofrass$Bac + labs(subtitle = "Bacteria")
@@ -474,8 +505,11 @@ alpha_plot_nofrass$Fun<-alpha_plot_nofrass$Fun + labs(subtitle = "Fungi")
 #save as a plot
 ggsave(filename = "./Results/alpha_div_2_sample_types.pdf",
        plot = ggarrange(alpha_plot_nofrass$Bac,
-                        alpha_plot_nofrass$Fun),
-       width = 30,
+                        alpha_plot_nofrass$Fun, 
+                        labels = "AUTO", 
+                        legend = "top",
+                        common.legend = TRUE),
+       width = 35,
        height = 15,
        units = "cm")
 
