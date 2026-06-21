@@ -12,8 +12,6 @@ editor_options:
 # 0 - load libraries
 ```{r}
 
-install.packages("decontam")
-
 
 #load necessary libraries
 library(phyloseq)
@@ -23,11 +21,8 @@ library(tidyr)
 library(decontam)
 library(dplyr)
 library(ggrepel)
-library("svglite")
+library(svglite)
 
-
-# increases memory limit used by R
-memory.limit(size = 350000)
 
 
 ```
