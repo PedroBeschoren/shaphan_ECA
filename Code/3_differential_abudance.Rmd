@@ -34,12 +34,6 @@ library(viridisLite)
 library(metacoder)
 
 
-
-# increases memory limit used by R
-memory.limit(size = 350000)
-
-
-
 #load the phyloseq objects containing all microbiome data
 load(file = "./Data/unnormalized_BacFun_ps_l.RData")
 
@@ -97,7 +91,7 @@ ps_deseq_fun <- DESeq(ps_deseq_fun, test="Wald", fitType="parametric")
 
 
 ## 5 - define constract vecotrs
-this sets ths pairwise comparisons you wnt to make
+this sets the pairwise comparisons you want to make
 
 ```{r}
 
