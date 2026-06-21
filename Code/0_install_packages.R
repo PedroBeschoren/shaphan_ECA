@@ -34,7 +34,7 @@ BiocManager::install("phyloseq")
 BiocManager::install("vegan")
 BiocManager::install("EcolUtils") # failed
 BiocManager::install("microbiome")
-BiocManager::install("metagMisc") # failed
+remotes::install_github("vmikk/metagMisc@v.0.0.4")
 BiocManager::install("DESeq2")
 BiocManager::install("locfit")
 BiocManager::install("DelayedArray")
