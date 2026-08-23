@@ -72,99 +72,7 @@ CSS_bacfun_ps_sampletype_l$Fun$rhizosphere<-subset_samples(CSS_bacfun_ps_samplet
 
 ```
 
-# 1 - Check beta diversity in a NMDS ordination
-
-Some clustering and treatment effects are evident!
-```{r}
-
-# calculate ordinations
-NMDS_BacFun_l <-lapply(CSS_bacfun_ps_sampletype_l, function (x)
-  lapply(x, function(y)
-          ordinate(y,
-                   method="NMDS",
-                   distance="bray",
-                   try=2000,
-                   autotransform=TRUE)))
-
-
-
-# define a function to calculate and plot NMDS based on bray-curtis
-NMDS_calculation_l <- function(physeq_l, ordination_output) {
-  
-  # this function takes as input a list of phyloseq objects and a list of calculated ordinations
-  # it also takes a list of bray-curtis distances calculated with phyloseq::ordinate
-  # it returns a list of NMDS plots, with titles in each plot
-  
-  untitled_plot_l<-mapply(function(x, y)
-    phyloseq::plot_ordination(physeq = x, 
-                              ordination = y,
-                              color ="frass_source",
-                              shape = "frass_treatment_and_dose")+
-      scale_shape_manual(values=c(1,2,4,16, 17))+
-      geom_point(aes(fill = frass_source))+
-      theme_classic() +
-      labs(subtitle = paste("Stress", round(y$stress, digits=4))) +
-      theme(plot.title = element_text(size = 10, face = "bold")) + # extarcts on where this is Bac or Fun, add to plot title
-      theme(legend.position="right"),
-    x = physeq_l,
-    y = ordination_output,
-    SIMPLIFY = FALSE)
-  
-  
-  
-  # adds firt taxonomic rank of first ps object as part of the tittle (Bac or Fun)
-  titles_l <- paste(names(physeq_l), unique(as.character(physeq_l[[1]]@tax_table[,1])))
-  
-  
-  
-  Plot_l<- mapply(function (z,w)
-    z + ggtitle(w),
-    z = untitled_plot_l,
-    w = titles_l,
-    SIMPLIFY = FALSE)
-  
-  return(Plot_l)
-}
-
-#use custom function, creating a list of plotsfunction
-NMDS_Bac_l<-NMDS_calculation_l(physeq_l = CSS_bacfun_ps_sampletype_l$Bac, 
-                               ordination_output = NMDS_BacFun_l$Bac )
-
-NMDS_Fun_l<-NMDS_calculation_l(physeq_l = CSS_bacfun_ps_sampletype_l$Fun, 
-                               ordination_output = NMDS_BacFun_l$Fun )
-
-
-# arrange all 3 plots in a pannel
-NMDS_Bac_l<-ggarrange(NMDS_Bac_l$bulk_soil,
-                        NMDS_Bac_l$rhizosphere,
-                        NMDS_Bac_l$frass, 
-                      common.legend = TRUE,
-                          legend = "top")
-
-NMDS_Fun_l<-ggarrange(NMDS_Fun_l$bulk_soil,
-                        NMDS_Fun_l$rhizosphere,
-                        NMDS_Fun_l$frass, 
-                      common.legend = TRUE,
-                          legend = "top")
-
-#export plot
-ggsave(filename = "./Results/NMDS_Bac_3_sample_types.pdf" ,
-       plot = NMDS_Bac_l,
-       width = 195,
-       height = 195,
-       units = "mm" )
-
-ggsave(filename = "./Results/NMDS_Fun_3_sample_types.pdf" ,
-       plot = NMDS_Fun_l,
-       width = 195,
-       height = 195,
-       units = "mm" )
-
-
-
-```
-
-# 1b - separate figures and update visuals and legends for 2026 review
+# 1 - separate figures and update visuals and legends for 2026 review
 ```{r}
 
 # calculate ordinations
@@ -236,7 +144,7 @@ NMDS_Fun_l$rhizosphere<-NMDS_Fun_l$rhizosphere+
 NMDS_Fun_l$bulk_soil<-NMDS_Fun_l$bulk_soil+
   ggtitle("Bulk soil fungi")
 
-# arrange all 3 plots in a pannel
+# arrange all 4 plots in a pannel
 NMDS_l<-ggarrange(NMDS_Bac_l$bulk_soil,
                       NMDS_Bac_l$rhizosphere,
                       NMDS_Fun_l$bulk_soil,
@@ -256,6 +164,65 @@ ggsave(filename = "./Results/NMDS_Bac_fun_2_sample_types.pdf" ,
        units = "mm" )
 
 
+############
+# hard code frass-only samples plot and export
+###########
+
+# calculate ordinations
+NMDS_BacFun_OnlyFrass_l <-lapply(CSS_bacfun_ps_sampletype_l, function (x)
+  lapply(x[2], function(y)
+          ordinate(y,
+                   method="NMDS",
+                   distance="bray",
+                   try=2000,
+                   autotransform=TRUE)))
+
+# make plots
+bac_OnlyFrass<-
+    phyloseq::plot_ordination(physeq = CSS_bacfun_ps_sampletype_l$Bac$frass, 
+                              ordination = NMDS_BacFun_OnlyFrass_l$Bac$frass,
+                              color ="frass_source",
+                              shape = "frass_treatment")+
+      scale_shape_manual(values=c(1,16,2,17,4))+
+      theme_classic() +
+      labs(subtitle = paste("Stress", round(NMDS_BacFun_OnlyFrass_l$Bac$frass$stress, digits=4))) +
+  ggtitle("K__Bacteria")+
+      theme(plot.title = element_text(size = 10, face = "bold")) + 
+      theme(legend.position="right")+
+      labs(color="Frass source", 
+           shape="Frass treatment")
+    
+# make plots
+fun_OnlyFrass<-
+    phyloseq::plot_ordination(physeq = CSS_bacfun_ps_sampletype_l$Fun$frass, 
+                              ordination = NMDS_BacFun_OnlyFrass_l$Fun$frass,
+                              color ="frass_source",
+                              shape = "frass_treatment")+
+      scale_shape_manual(values=c(1,16,2,17,4))+
+      theme_classic() +
+      labs(subtitle = paste("Stress", round(NMDS_BacFun_OnlyFrass_l$Fun$frass$stress, digits=4))) +
+    ggtitle("K__Fungi")+
+      theme(plot.title = element_text(size = 10, face = "bold")) + # extarcts on where this is Bac or Fun, add to plot title
+      theme(legend.position="right")+
+      labs(color="Frass source", 
+           shape="Frass treatment")
+
+
+
+Join_frassOnly_plot<-
+ggarrange(bac_OnlyFrass, 
+          fun_OnlyFrass,
+               labels = "AUTO",
+                  common.legend = TRUE,
+                  ncol =2,
+                      legend = "top")
+
+#export plot
+ggsave(filename = "./Results/NMDS_Bac_fun_OnlyFrass.pdf" ,
+       plot = Join_frassOnly_plot,
+       width = 195,
+       height = 100,
+       units = "mm" )
 
 
 ```
@@ -274,7 +241,7 @@ CSS_bacfun_BulkRhizo_ps_l<-lapply(CSS_bacfun_ps_sampletype_l, function (x) x[c(1
 # remove frass source N from samples
 CSS_bacfun_BulkRhizo_ps_l<-lapply(CSS_bacfun_BulkRhizo_ps_l, function(y)
   lapply(y, function(x){
-  x<-subset_samples(x, frass_source != "N") # from frass source N
+  x<-subset_samples(x, frass_source != "NoFrass") # from frass source N
   x<-prune_taxa(taxa_sums(otu_table(x)) > 0, x) # remove ASVs with zero counts (that is, ASVS that only show up on frass source N)
 return(x)
 }))
@@ -557,7 +524,7 @@ ggsave(filename = "./Results/alpha_div_frass_sample_types.pdf",
 
 # remove conditions that make an anova model complicated
 calculated_diversity_filtred_df_l<-lapply(calculated_diversity_df_l, function (x)
- dplyr::filter(x, frass_source !="N" & sample_type !="frass"))
+ dplyr::filter(x, frass_source !="NoFrass" & sample_type !="frass"))
 
 
 #Lets see this on a simple boxplot for Shannon diversity index
