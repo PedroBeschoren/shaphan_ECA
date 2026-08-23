@@ -40,7 +40,8 @@ rarefied_BacFun_ps_l<-lapply(rarefied_BacFun_ps_l, function (x) subset_samples(x
 rarefied_BacFun_ps_l<-lapply(rarefied_BacFun_ps_l, function (x) subset_samples(x, sample_type !="frass"))
 
 #split by sample type
-rarefied_BacFun_ps_sampletype_FrassTrestemnt_l<-lapply(rarefied_BacFun_ps_l, function (x)metagMisc::phyloseq_sep_variable(x, variable = c("sample_type", "frass_treatment")))
+rarefied_BacFun_ps_sampletype_FrassTrestemnt_l<-lapply(rarefied_BacFun_ps_l, function (x)
+  metagMisc::phyloseq_sep_variable(x, variable = c("sample_type", "frass_treatment")))
 
 # remove bulk soil outlier
 rarefied_BacFun_ps_sampletype_l$Bac$bulk_soil<-subset_samples(rarefied_BacFun_ps_sampletype_l$Bac$bulk_soil, sample_names(rarefied_BacFun_ps_sampletype_l$Bac$bulk_soil) !="93B")
